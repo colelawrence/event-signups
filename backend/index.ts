@@ -506,12 +506,12 @@ app.get("/api/:eventId/details", authMiddleware, async c => {
     
     // Get counts
     const attendeeCountResult = await sqlite.execute(
-      `SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?`,
+      `SELECT COUNT(*) as count FROM ${TABLES.ATTENDEES} WHERE event_id = ?`,
       [eventId]
     );
     
     const checkedInCountResult = await sqlite.execute(
-      `SELECT COUNT(*) as count FROM ${CHECKINS_TABLE} WHERE event_id = ?`,
+      `SELECT COUNT(*) as count FROM ${TABLES.CHECKINS} WHERE event_id = ?`,
       [eventId]
     );
     
@@ -547,19 +547,19 @@ app.get("/api/:eventId/analytics", authMiddleware, async c => {
     
     // Get total counts
     const totalAttendees = await sqlite.execute(
-      `SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?`,
+      `SELECT COUNT(*) as count FROM ${TABLES.ATTENDEES} WHERE event_id = ?`,
       [eventId]
     );
     
     const totalCheckedIn = await sqlite.execute(
-      `SELECT COUNT(*) as count FROM ${CHECKINS_TABLE} WHERE event_id = ?`,
+      `SELECT COUNT(*) as count FROM ${TABLES.CHECKINS} WHERE event_id = ?`,
       [eventId]
     );
     
     // Get check-ins by date
     const checkInsByDate = await sqlite.execute(`
       SELECT DATE(checked_in_at) as date, COUNT(*) as count
-      FROM ${CHECKINS_TABLE}
+      FROM ${TABLES.CHECKINS}
       WHERE event_id = ?
       GROUP BY DATE(checked_in_at)
       ORDER BY date
@@ -568,8 +568,8 @@ app.get("/api/:eventId/analytics", authMiddleware, async c => {
     // Get recent check-ins
     const recentCheckIns = await sqlite.execute(`
       SELECT a.name as attendee_name, c.checked_in_at
-      FROM ${CHECKINS_TABLE} c
-      JOIN ${ATTENDEES_TABLE} a ON c.attendee_id = a.id
+      FROM ${TABLES.CHECKINS} c
+      JOIN ${TABLES.ATTENDEES} a ON c.attendee_id = a.id
       WHERE c.event_id = ?
       ORDER BY c.checked_in_at DESC
       LIMIT 10
@@ -606,7 +606,7 @@ app.get("/api/:eventId/export", authMiddleware, async c => {
     
     // Get event name
     const eventsResult = await sqlite.execute(
-      `SELECT name FROM ${EVENTS_TABLE} WHERE id = ?`,
+      `SELECT name FROM ${TABLES.EVENTS} WHERE id = ?`,
       [eventId]
     );
     
@@ -618,8 +618,8 @@ app.get("/api/:eventId/export", authMiddleware, async c => {
     // Get all attendees with check-in data
     const dataResult = await sqlite.execute(`
       SELECT a.name, a.external_id, c.checked_in_at
-      FROM ${ATTENDEES_TABLE} a
-      LEFT JOIN ${CHECKINS_TABLE} c ON a.id = c.attendee_id
+      FROM ${TABLES.ATTENDEES} a
+      LEFT JOIN ${TABLES.CHECKINS} c ON a.id = c.attendee_id
       WHERE a.event_id = ?
       ORDER BY a.name
     `, [eventId]);

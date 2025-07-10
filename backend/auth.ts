@@ -1,10 +1,7 @@
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
 import { getCookie, setCookie, deleteCookie } from "https://esm.sh/hono@3.11.7/cookie";
 import type { Context } from "https://esm.sh/hono@3.11.7";
-
-// Database table names
-const SESSIONS_TABLE = "sessions_1";
-const EVENTS_TABLE = "events_2";
+import { TABLES } from "./database.ts";
 
 // Session configuration
 const SESSION_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 30; // 30 days
@@ -22,16 +19,7 @@ interface SessionWithToken extends Session {
   token: string;
 }
 
-// Initialize sessions table
-export async function initSessionsTable() {
-  await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${SESSIONS_TABLE} (
-    id TEXT NOT NULL PRIMARY KEY,
-    secret_hash BLOB NOT NULL,
-    event_id INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (event_id) REFERENCES ${EVENTS_TABLE}(id)
-  )`);
-}
+// Note: Sessions table initialization moved to database.ts
 
 // Generate secure random string for session IDs and secrets
 function generateSecureRandomString(): string {
@@ -83,7 +71,7 @@ export async function createSession(eventId: number): Promise<SessionWithToken> 
   };
   
   await sqlite.execute(
-    `INSERT INTO ${SESSIONS_TABLE} (id, secret_hash, event_id, created_at) VALUES (?, ?, ?, ?)`,
+    `INSERT INTO ${TABLES.SESSIONS} (id, secret_hash, event_id, created_at) VALUES (?, ?, ?, ?)`,
     [sessionId, secretHash, eventId, Math.floor(now.getTime() / 1000)]
   );
   
@@ -124,7 +112,7 @@ async function getSession(sessionId: string): Promise<Session | null> {
   const now = new Date();
   
   const result = await sqlite.execute(
-    `SELECT id, secret_hash, event_id, created_at FROM ${SESSIONS_TABLE} WHERE id = ?`,
+    `SELECT id, secret_hash, event_id, created_at FROM ${TABLES.SESSIONS} WHERE id = ?`,
     [sessionId]
   );
   
@@ -151,7 +139,7 @@ async function getSession(sessionId: string): Promise<Session | null> {
 
 // Delete session
 export async function deleteSession(sessionId: string): Promise<void> {
-  await sqlite.execute(`DELETE FROM ${SESSIONS_TABLE} WHERE id = ?`, [sessionId]);
+  await sqlite.execute(`DELETE FROM ${TABLES.SESSIONS} WHERE id = ?`, [sessionId]);
 }
 
 // Set session cookie
