@@ -3,7 +3,6 @@ import { readFile, serveFile } from "https://esm.town/v/std/utils@85-main/index.
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
 import { getCookie, setCookie } from "https://esm.sh/hono@3.11.7/cookie";
 import { 
-  initSessionsTable, 
   createSession, 
   setSessionCookie, 
   clearSessionCookie,
@@ -11,6 +10,7 @@ import {
   verifyEventAccess,
   csrfMiddleware
 } from "./auth.ts";
+import { initDatabase, TABLES } from "./database.ts";
 
 const app = new Hono();
 
@@ -19,48 +19,7 @@ app.onError((err, c) => {
   throw err;
 });
 
-// Database table names
-const EVENTS_TABLE = "events_3";
-const ATTENDEES_TABLE = "attendees_3"; 
-const CHECKINS_TABLE = "checkins_3";
-
-// Initialize database
-async function initDatabase() {
-  console.log(`💾 [DB] Initializing database tables`);
-  
-  // Events table - using unix timestamp as primary key
-  await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${EVENTS_TABLE} (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    location TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  
-  // Attendees table
-  await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${ATTENDEES_TABLE} (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    external_id TEXT,
-    FOREIGN KEY (event_id) REFERENCES ${EVENTS_TABLE}(id)
-  )`);
-  
-  // Check-ins table
-  await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${CHECKINS_TABLE} (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id INTEGER NOT NULL,
-    attendee_id INTEGER NOT NULL,
-    checked_in_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (event_id) REFERENCES ${EVENTS_TABLE}(id),
-    FOREIGN KEY (attendee_id) REFERENCES ${ATTENDEES_TABLE}(id)
-  )`);
-  
-  // Initialize sessions table
-  await initSessionsTable();
-  
-  console.log(`✅ [DB] Database initialization complete`);
-}
+// Database table names imported from centralized schema
 
 // Initialize database on startup
 await initDatabase();
@@ -249,7 +208,7 @@ app.post("/api/events", async c => {
 
     try {
       await sqlite.execute(
-        `INSERT INTO ${EVENTS_TABLE} (id, name, password_hash, location) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO ${TABLES.EVENTS} (id, name, password_hash, location) VALUES (?, ?, ?, ?)`,
         [eventId, name, passwordHash, location || null]
       );
       console.log(`✅ [API] Event successfully inserted into database with ID: ${eventId}`);
@@ -259,7 +218,7 @@ app.post("/api/events", async c => {
     }
 
     // Verify event was created
-    const verifyEventResult = await sqlite.execute(`SELECT id, name FROM ${EVENTS_TABLE} WHERE id = ?`, [eventId]);
+    const verifyEventResult = await sqlite.execute(`SELECT id, name FROM ${TABLES.EVENTS} WHERE id = ?`, [eventId]);
     const verifyEvent = verifyEventResult.rows || verifyEventResult;
     console.log(`🔍 [API] Event verification: found ${verifyEvent.length} events with ID ${eventId}`);
     if (verifyEvent.length > 0) {
@@ -272,7 +231,7 @@ app.post("/api/events", async c => {
     for (const attendee of attendees) {
       try {
         await sqlite.execute(
-          `INSERT INTO ${ATTENDEES_TABLE} (event_id, name, external_id) VALUES (?, ?, ?)`,
+          `INSERT INTO ${TABLES.ATTENDEES} (event_id, name, external_id) VALUES (?, ?, ?)`,
           [eventId, attendee.name, attendee.external_id || null]
         );
         insertedCount++;
@@ -284,7 +243,7 @@ app.post("/api/events", async c => {
     }
 
     // Verify attendees were inserted
-    const verifyAttendeesResult = await sqlite.execute(`SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?`, [eventId]);
+    const verifyAttendeesResult = await sqlite.execute(`SELECT COUNT(*) as count FROM ${TABLES.ATTENDEES} WHERE event_id = ?`, [eventId]);
     const verifyAttendees = verifyAttendeesResult.rows || verifyAttendeesResult;
     const actualAttendeeCount = Number(verifyAttendees[0]?.count || 0);
     console.log(`🔍 [API] Attendee verification: expected ${attendees.length}, found ${actualAttendeeCount} in database`);
@@ -311,7 +270,7 @@ app.get("/api/:eventId", async c => {
   
   try {
     const eventResult = await sqlite.execute(`
-      SELECT id, name, location, created_at FROM ${EVENTS_TABLE} WHERE id = ?
+      SELECT id, name, location, created_at FROM ${TABLES.EVENTS} WHERE id = ?
     `, [eventId]);
     
     const event = eventResult.rows || eventResult;
@@ -323,12 +282,12 @@ app.get("/api/:eventId", async c => {
     
     // Get attendee counts
     const attendeeCountResult = await sqlite.execute(`
-      SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?
+      SELECT COUNT(*) as count FROM ${TABLES.ATTENDEES} WHERE event_id = ?
     `, [eventId]);
     
     const checkedInCountResult = await sqlite.execute(`
-      SELECT COUNT(*) as count FROM ${CHECKINS_TABLE} WHERE attendee_id IN (
-        SELECT id FROM ${ATTENDEES_TABLE} WHERE event_id = ?
+      SELECT COUNT(*) as count FROM ${TABLES.CHECKINS} WHERE attendee_id IN (
+        SELECT id FROM ${TABLES.ATTENDEES} WHERE event_id = ?
       )
     `, [eventId]);
     
@@ -363,9 +322,9 @@ app.get("/api/:eventId/attendees", async c => {
   
   try {
     // First check if event exists
-    console.log(`🔍 [API] Checking if event ${eventId} exists in table ${EVENTS_TABLE}`);
+    console.log(`🔍 [API] Checking if event ${eventId} exists in table ${TABLES.EVENTS}`);
     const eventCheckResult = await sqlite.execute(`
-      SELECT id FROM ${EVENTS_TABLE} WHERE id = ?
+      SELECT id FROM ${TABLES.EVENTS} WHERE id = ?
     `, [eventId]);
     
     const eventCheck = eventCheckResult.rows || eventCheckResult;
@@ -376,12 +335,12 @@ app.get("/api/:eventId/attendees", async c => {
     }
     
     // Get attendees with check-in status
-    console.log(`🔍 [API] Querying attendees from table ${ATTENDEES_TABLE} for event ${eventId}`);
+    console.log(`🔍 [API] Querying attendees from table ${TABLES.ATTENDEES} for event ${eventId}`);
     const attendeesResult = await sqlite.execute(`
       SELECT a.id, a.name, 
              CASE WHEN c.id IS NOT NULL THEN 1 ELSE 0 END as checked_in
-      FROM ${ATTENDEES_TABLE} a
-      LEFT JOIN ${CHECKINS_TABLE} c ON a.id = c.attendee_id
+      FROM ${TABLES.ATTENDEES} a
+      LEFT JOIN ${TABLES.CHECKINS} c ON a.id = c.attendee_id
       WHERE a.event_id = ?
       ORDER BY a.name
     `, [eventId]);
@@ -426,7 +385,7 @@ app.post("/api/:eventId/signin", async c => {
     
     // Verify attendee belongs to this event
     const attendeeResult = await sqlite.execute(
-      `SELECT * FROM ${ATTENDEES_TABLE} WHERE id = ? AND event_id = ?`,
+      `SELECT * FROM ${TABLES.ATTENDEES} WHERE id = ? AND event_id = ?`,
       [attendeeId, eventId]
     );
     
@@ -437,7 +396,7 @@ app.post("/api/:eventId/signin", async c => {
     
     // Check if already signed in
     const existingCheckInResult = await sqlite.execute(
-      `SELECT * FROM ${CHECKINS_TABLE} WHERE event_id = ? AND attendee_id = ?`,
+      `SELECT * FROM ${TABLES.CHECKINS} WHERE event_id = ? AND attendee_id = ?`,
       [eventId, attendeeId]
     );
     
@@ -456,7 +415,7 @@ app.post("/api/:eventId/signin", async c => {
     
     // Record check-in
     await sqlite.execute(
-      `INSERT INTO ${CHECKINS_TABLE} (event_id, attendee_id) VALUES (?, ?)`,
+      `INSERT INTO ${TABLES.CHECKINS} (event_id, attendee_id) VALUES (?, ?)`,
       [eventId, attendeeId]
     );
     
@@ -488,7 +447,7 @@ app.post("/api/:eventId/auth", async c => {
     
     // Get event
     const eventsResult = await sqlite.execute(
-      `SELECT * FROM ${EVENTS_TABLE} WHERE id = ?`,
+      `SELECT * FROM ${TABLES.EVENTS} WHERE id = ?`,
       [eventId]
     );
     
@@ -534,7 +493,7 @@ app.get("/api/:eventId/details", authMiddleware, async c => {
     
     // Get event
     const eventsResult = await sqlite.execute(
-      `SELECT * FROM ${EVENTS_TABLE} WHERE id = ?`,
+      `SELECT * FROM ${TABLES.EVENTS} WHERE id = ?`,
       [eventId]
     );
     

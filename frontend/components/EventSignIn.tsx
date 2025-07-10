@@ -95,7 +95,7 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
           <p className="text-[var(--error)] mb-4">{error}</p>
           <button
             onClick={() => { setError(null); loadAttendees(); }}
-            className="px-4 py-2 bg-[var(--accent-primary)] text-[var(--text-primary)] font-mono rounded hover:bg-[var(--accent-secondary)]"
+            className="px-4 py-2 bg-[var(--accent-primary)] text-[#2d3748] font-mono rounded hover:bg-[var(--accent-secondary)]"
           >
             Try Again
           </button>
@@ -161,7 +161,7 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
                   className={`px-6 py-2 rounded-lg font-medium transition-colors ${
                     attendee.checkedIn
                       ? 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]'
-                      : 'bg-[var(--accent-primary)] text-[var(--text-primary)] hover:bg-[var(--accent-secondary)]'
+                      : 'bg-[var(--accent-primary)] text-[#2d3748] hover:bg-[var(--accent-secondary)]'
                   } ${isSigningIn ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   {isSigningIn ? 'Signing In...' : attendee.checkedIn ? 'Check In Again' : 'Check In'}

@@ -78,7 +78,7 @@ CREATE TABLE checkins_N (
 
 ## API Endpoints
 
-- `POST /api` - Create a new event
+- `POST /api/events` - Create a new event
 - `GET /api/:eventId` - Get event details (password protected)
 - `POST /api/:eventId/signin` - Sign in to an event
 - `GET /api/:eventId/attendees` - Get attendee list for sign-in (names only)

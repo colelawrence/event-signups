@@ -16,8 +16,8 @@ Allow event creators to enable on-site registration where attendees can register
 - [ ] Update Event interface to include `allow_onsite_registration: boolean`
 
 ### Registration Form
-- [ ] Add GET `/api/events/{eventId}/signup` endpoint returning event name and registration status
-- [ ] Add POST `/api/events/{eventId}/signup` endpoint accepting `{ name: string }`
+- [ ] Add GET `/api/:eventId/signup` endpoint returning event name and registration status
+- [ ] Add POST `/api/:eventId/signup` endpoint accepting `{ name: string }`
 - [ ] Only show registration form if `allow_onsite_registration` is true
 - [ ] Create new attendee record with `external_id` set to "onsite-{timestamp}"
 
