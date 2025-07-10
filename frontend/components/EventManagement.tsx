@@ -17,14 +17,30 @@ export default function EventManagement({ eventId }: EventManagementProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
+    // Check if we're already authenticated via session
+    checkAuthentication();
+  }, [eventId]);
+
+  useEffect(() => {
     if (isAuthenticated) {
       loadData();
     }
   }, [eventId, isAuthenticated]);
 
+  const checkAuthentication = async () => {
+    try {
+      const response = await fetch(`/api/events/${eventId}/details`);
+      if (response.ok) {
+        setIsAuthenticated(true);
+      }
+    } catch (err) {
+      // Not authenticated, stay on login form
+    }
+  };
+
   const authenticate = async () => {
     try {
-      const response = await fetch(`/api/events/${eventId}/manage`, {
+      const response = await fetch(`/api/events/${eventId}/auth`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
@@ -45,7 +61,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
     try {
       setLoading(true);
       const [detailsRes, attendeesRes, analyticsRes] = await Promise.all([
-        fetch(`/api/events/${eventId}`),
+        fetch(`/api/events/${eventId}/details`),
         fetch(`/api/events/${eventId}/attendees`),
         fetch(`/api/events/${eventId}/analytics`)
       ]);
@@ -95,6 +111,15 @@ export default function EventManagement({ eventId }: EventManagementProps) {
 
   const copySignInUrl = () => {
     navigator.clipboard.writeText(getSignInUrl());
+  };
+
+  const logout = async () => {
+    try {
+      await fetch(`/api/events/${eventId}/logout`, { method: 'POST' });
+      setIsAuthenticated(false);
+    } catch (err) {
+      // Handle logout error
+    }
   };
 
   if (!isAuthenticated) {
@@ -166,9 +191,17 @@ export default function EventManagement({ eventId }: EventManagementProps) {
     <div className="min-h-screen bg-[var(--bg-primary)] p-4">
       <div className="max-w-6xl mx-auto">
         <div className="mb-6">
-          <h1 className="font-heading text-3xl text-[var(--text-primary)] mb-2">
-            {eventDetails?.event.name}
-          </h1>
+          <div className="flex justify-between items-start mb-2">
+            <h1 className="font-heading text-3xl text-[var(--text-primary)]">
+              {eventDetails?.event.name}
+            </h1>
+            <button
+              onClick={logout}
+              className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              Logout
+            </button>
+          </div>
           {eventDetails?.event.location && (
             <p className="text-[var(--text-secondary)]">📍 {eventDetails.event.location}</p>
           )}

@@ -2,6 +2,15 @@ import { Hono } from "https://esm.sh/hono@3.11.7";
 import { readFile, serveFile } from "https://esm.town/v/std/utils@85-main/index.ts";
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
 import { getCookie, setCookie } from "https://esm.sh/hono@3.11.7/cookie";
+import { 
+  initSessionsTable, 
+  createSession, 
+  setSessionCookie, 
+  clearSessionCookie,
+  authMiddleware,
+  verifyEventAccess,
+  csrfMiddleware
+} from "./auth.ts";
 
 const app = new Hono();
 
@@ -46,6 +55,9 @@ async function initDatabase() {
     FOREIGN KEY (event_id) REFERENCES ${EVENTS_TABLE}(id),
     FOREIGN KEY (attendee_id) REFERENCES ${ATTENDEES_TABLE}(id)
   )`);
+  
+  // Initialize sessions table
+  await initSessionsTable();
   
   console.log(`✅ [DB] Database initialization complete`);
 }
@@ -258,6 +270,54 @@ app.post("/api/events", async c => {
   }
 });
 
+// Get basic event info (public, no auth required)
+app.get("/api/events/:eventId", async c => {
+  const eventId = parseInt(c.req.param("eventId"));
+  console.log(`📋 [API] Fetching basic event details for event ${eventId}`);
+  
+  try {
+    const event = await sqlite.execute(`
+      SELECT id, name, location, created_at FROM ${EVENTS_TABLE} WHERE id = ?
+    `, [eventId]);
+    
+    if (event.length === 0) {
+      console.log(`❌ [API] Event ${eventId} not found`);
+      return c.json({ error: "Event not found" }, 404);
+    }
+    
+    // Get attendee counts
+    const attendeeCountResult = await sqlite.execute(`
+      SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?
+    `, [eventId]);
+    
+    const checkedInCountResult = await sqlite.execute(`
+      SELECT COUNT(*) as count FROM ${CHECKINS_TABLE} WHERE attendee_id IN (
+        SELECT id FROM ${ATTENDEES_TABLE} WHERE event_id = ?
+      )
+    `, [eventId]);
+    
+    const attendeeCount = Number(attendeeCountResult[0]?.count || 0);
+    const checkedInCount = Number(checkedInCountResult[0]?.count || 0);
+    
+    console.log(`📋 [API] Event ${eventId} found: ${attendeeCount} attendees, ${checkedInCount} checked in`);
+    
+    return c.json({
+      event: {
+        id: event[0].id,
+        name: event[0].name,
+        location: event[0].location,
+        created_at: event[0].created_at
+      },
+      attendeeCount,
+      checkedInCount
+    });
+    
+  } catch (error) {
+    console.error(`💥 [API] Error fetching event details:`, error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 // Get attendee list for sign-in (names only, no sensitive info)
 app.get("/api/events/:eventId/attendees", async c => {
   const eventId = parseInt(c.req.param("eventId"));
@@ -360,8 +420,8 @@ app.post("/api/events/:eventId/signin", async c => {
   }
 });
 
-// Get event details (password protected)
-app.post("/api/events/:eventId/details", async c => {
+// Authentication endpoint - login with password and create session
+app.post("/api/events/:eventId/auth", async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
@@ -388,6 +448,46 @@ app.post("/api/events/:eventId/details", async c => {
     if (!verifyPassword(password, event.password_hash)) {
       return c.json({ error: "Invalid password" }, 401);
     }
+    
+    // Create session
+    const session = await createSession(eventId);
+    setSessionCookie(c, session.token);
+    
+    return c.json({ success: true });
+    
+  } catch (error) {
+    console.error(`💥 [API] Error during authentication:`, error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Logout endpoint
+app.post("/api/events/:eventId/logout", async c => {
+  clearSessionCookie(c);
+  return c.json({ success: true });
+});
+
+// Get event details (session protected)
+app.get("/api/events/:eventId/details", authMiddleware, async c => {
+  const eventId = parseInt(c.req.param("eventId"));
+  
+  try {
+    // Verify access to this specific event
+    if (!await verifyEventAccess(c, eventId)) {
+      return c.json({ error: "Unauthorized for this event" }, 403);
+    }
+    
+    // Get event
+    const events = await sqlite.execute(
+      `SELECT * FROM ${EVENTS_TABLE} WHERE id = ?`,
+      [eventId]
+    );
+    
+    if (events.length === 0) {
+      return c.json({ error: "Event not found" }, 404);
+    }
+    
+    const event = events[0];
     
     // Get counts
     const attendeeCount = await sqlite.execute(
@@ -417,30 +517,14 @@ app.post("/api/events/:eventId/details", async c => {
   }
 });
 
-// Get analytics (password protected)
-app.post("/api/events/:eventId/analytics", async c => {
+// Get analytics (session protected)
+app.get("/api/events/:eventId/analytics", authMiddleware, async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
-    const body = await c.req.json();
-    const { password } = body;
-    
-    if (!password) {
-      return c.json({ error: "Password required" }, 401);
-    }
-    
-    // Verify event and password
-    const events = await sqlite.execute(
-      `SELECT password_hash FROM ${EVENTS_TABLE} WHERE id = ?`,
-      [eventId]
-    );
-    
-    if (events.length === 0) {
-      return c.json({ error: "Event not found" }, 404);
-    }
-    
-    if (!verifyPassword(password, events[0].password_hash)) {
-      return c.json({ error: "Invalid password" }, 401);
+    // Verify access to this specific event
+    if (!await verifyEventAccess(c, eventId)) {
+      return c.json({ error: "Unauthorized for this event" }, 403);
     }
     
     // Get total counts
@@ -492,30 +576,24 @@ app.post("/api/events/:eventId/analytics", async c => {
   }
 });
 
-// Export check-in data as CSV (password protected)
-app.post("/api/events/:eventId/export", async c => {
+// Export check-in data as CSV (session protected)
+app.get("/api/events/:eventId/export", authMiddleware, async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
-    const body = await c.req.json();
-    const { password } = body;
-    
-    if (!password) {
-      return c.json({ error: "Password required" }, 401);
+    // Verify access to this specific event
+    if (!await verifyEventAccess(c, eventId)) {
+      return c.json({ error: "Unauthorized for this event" }, 403);
     }
     
-    // Verify event and password
+    // Get event name
     const events = await sqlite.execute(
-      `SELECT password_hash, name FROM ${EVENTS_TABLE} WHERE id = ?`,
+      `SELECT name FROM ${EVENTS_TABLE} WHERE id = ?`,
       [eventId]
     );
     
     if (events.length === 0) {
       return c.json({ error: "Event not found" }, 404);
-    }
-    
-    if (!verifyPassword(password, events[0].password_hash)) {
-      return c.json({ error: "Invalid password" }, 401);
     }
     
     // Get all attendees with check-in data
