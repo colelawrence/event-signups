@@ -245,22 +245,49 @@ app.post("/api/events", async c => {
     // Create event with unix timestamp as ID
     const passwordHash = hashPassword(password);
     const eventId = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
-    
-    await sqlite.execute(
-      `INSERT INTO ${EVENTS_TABLE} (id, name, password_hash, location) VALUES (?, ?, ?, ?)`,
-      [eventId, name, passwordHash, location || null]
-    );
-    console.log(`✅ [API] Event created with ID: ${eventId}`);
-    
-    // Insert attendees
-    for (const attendee of attendees) {
+    console.log(`📋 [API] Creating event with ID: ${eventId}, name: "${name}", location: "${location || 'N/A'}"`);
+
+    try {
       await sqlite.execute(
-        `INSERT INTO ${ATTENDEES_TABLE} (event_id, name, external_id) VALUES (?, ?, ?)`,
-        [eventId, attendee.name, attendee.external_id || null]
+        `INSERT INTO ${EVENTS_TABLE} (id, name, password_hash, location) VALUES (?, ?, ?, ?)`,
+        [eventId, name, passwordHash, location || null]
       );
+      console.log(`✅ [API] Event successfully inserted into database with ID: ${eventId}`);
+    } catch (error) {
+      console.error(`💥 [API] Failed to insert event:`, error);
+      throw error;
     }
-    
-    console.log(`✅ [API] Added ${attendees.length} attendees to event`);
+
+    // Verify event was created
+    const verifyEvent = await sqlite.execute(`SELECT id, name FROM ${EVENTS_TABLE} WHERE id = ?`, [eventId]);
+    console.log(`🔍 [API] Event verification: found ${verifyEvent.length} events with ID ${eventId}`);
+    if (verifyEvent.length > 0) {
+      console.log(`🔍 [API] Event details: ${JSON.stringify(verifyEvent[0])}`);
+    }
+
+    // Insert attendees
+    console.log(`📋 [API] Starting to insert ${attendees.length} attendees...`);
+    let insertedCount = 0;
+    for (const attendee of attendees) {
+      try {
+        await sqlite.execute(
+          `INSERT INTO ${ATTENDEES_TABLE} (event_id, name, external_id) VALUES (?, ?, ?)`,
+          [eventId, attendee.name, attendee.external_id || null]
+        );
+        insertedCount++;
+        console.log(`👤 [API] Inserted attendee ${insertedCount}/${attendees.length}: "${attendee.name}" (external_id: ${attendee.external_id || 'N/A'})`);
+      } catch (error) {
+        console.error(`💥 [API] Failed to insert attendee "${attendee.name}":`, error);
+        throw error;
+      }
+    }
+
+    // Verify attendees were inserted
+    const verifyAttendees = await sqlite.execute(`SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?`, [eventId]);
+    const actualAttendeeCount = Number(verifyAttendees[0]?.count || 0);
+    console.log(`🔍 [API] Attendee verification: expected ${attendees.length}, found ${actualAttendeeCount} in database`);
+
+    console.log(`✅ [API] Successfully added ${insertedCount} attendees to event ${eventId}`);
     
     return c.json({
       success: true,
@@ -330,16 +357,19 @@ app.get("/api/:eventId/attendees", async c => {
   
   try {
     // First check if event exists
+    console.log(`🔍 [API] Checking if event ${eventId} exists in table ${EVENTS_TABLE}`);
     const eventCheck = await sqlite.execute(`
       SELECT id FROM ${EVENTS_TABLE} WHERE id = ?
     `, [eventId]);
     
+    console.log(`🔍 [API] Event check result: found ${eventCheck.length} events with ID ${eventId}`);
     if (eventCheck.length === 0) {
       console.log(`❌ [API] Event ${eventId} not found`);
       return c.json({ error: "Event not found" }, 404);
     }
     
     // Get attendees with check-in status
+    console.log(`🔍 [API] Querying attendees from table ${ATTENDEES_TABLE} for event ${eventId}`);
     const attendees = await sqlite.execute(`
       SELECT a.id, a.name, 
              CASE WHEN c.id IS NOT NULL THEN 1 ELSE 0 END as checked_in
@@ -351,16 +381,25 @@ app.get("/api/:eventId/attendees", async c => {
     
     console.log(`📋 [API] Found ${attendees.length} attendees for event ${eventId}`);
     
-    return c.json({
+    // Log first few attendees for debugging
+    if (attendees.length > 0) {
+      console.log(`🔍 [API] First few attendees:`, attendees.slice(0, 3).map(a => ({ id: a.id, name: a.name, checked_in: a.checked_in })));
+    }
+    
+    const result = {
       attendees: attendees.map(row => ({
         id: row.id,
         name: row.name,
         checkedIn: Boolean(row.checked_in)
       }))
-    });
+    };
+    
+    console.log(`📋 [API] Returning ${result.attendees.length} attendees to client`);
+    return c.json(result);
     
   } catch (error) {
-    console.error(`💥 [API] Error fetching attendees:`, error);
+    console.error(`💥 [API] Error fetching attendees for event ${eventId}:`, error);
+    console.error(`💥 [API] Error stack:`, error.stack);
     return c.json({ error: "Internal server error" }, 500);
   }
 });
