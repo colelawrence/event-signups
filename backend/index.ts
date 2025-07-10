@@ -20,9 +20,9 @@ app.onError((err, c) => {
 });
 
 // Database table names
-const EVENTS_TABLE = "events_2";
-const ATTENDEES_TABLE = "attendees_2"; 
-const CHECKINS_TABLE = "checkins_2";
+const EVENTS_TABLE = "events_3";
+const ATTENDEES_TABLE = "attendees_3"; 
+const CHECKINS_TABLE = "checkins_3";
 
 // Initialize database
 async function initDatabase() {

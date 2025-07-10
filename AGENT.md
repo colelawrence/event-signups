@@ -9,7 +9,7 @@
 - **Val Town Project**: Deno-based event check-in system with React frontend
 - **Backend**: Hono API server (backend/index.ts) handling event management and check-ins
 - **Frontend**: React 18.2.0 with TypeScript (frontend/index.tsx, components/)
-- **Database**: SQLite with events_1, attendees_1, and checkins_1 tables
+- **Database**: SQLite with events_2, attendees_1, and checkins_1 tables
 - **Features**: Password-protected event creation, CSV attendee upload, fuzzy search, analytics
 - **Shared**: TypeScript types and utilities (shared/types.ts)
 
