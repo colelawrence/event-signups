@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
 import EventCreation from "./EventCreation.tsx";
 import EventSignIn from "./EventSignIn.tsx";
 import EventManagement from "./EventManagement.tsx";
+import EventLinks from "./EventLinks.tsx";
 
 // Simple client-side routing based on URL path
 function useRouter() {
@@ -33,7 +34,7 @@ export default function App() {
   
   const renderPage = () => {
     if (path === '/' || path === '/events/new') {
-      return <EventCreation onEventCreated={(eventId) => navigate(`/events/${eventId}/manage`)} />;
+      return <EventCreation onEventCreated={(eventId) => navigate(`/events/${eventId}`)} />;
     }
     
     if (path.includes('/signin')) {
@@ -46,6 +47,12 @@ export default function App() {
       const eventId = getEventId();
       if (!eventId) return <div>Invalid event ID</div>;
       return <EventManagement eventId={eventId} />;
+    }
+    
+    if (path.match(/^\/events\/\d+$/)) {
+      const eventId = getEventId();
+      if (!eventId) return <div>Invalid event ID</div>;
+      return <EventLinks eventId={eventId} />;
     }
     
     return <div>Page not found</div>;

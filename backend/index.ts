@@ -11,17 +11,17 @@ app.onError((err, c) => {
 });
 
 // Database table names
-const EVENTS_TABLE = "events_1";
-const ATTENDEES_TABLE = "attendees_1"; 
-const CHECKINS_TABLE = "checkins_1";
+const EVENTS_TABLE = "events_2";
+const ATTENDEES_TABLE = "attendees_2"; 
+const CHECKINS_TABLE = "checkins_2";
 
 // Initialize database
 async function initDatabase() {
   console.log(`💾 [DB] Initializing database tables`);
   
-  // Events table
+  // Events table - using unix timestamp as primary key
   await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${EVENTS_TABLE} (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     location TEXT,
@@ -225,14 +225,14 @@ app.post("/api/events", async c => {
       return c.json({ error: "No valid attendees found in CSV", csvErrors: errors }, 400);
     }
     
-    // Create event
+    // Create event with unix timestamp as ID
     const passwordHash = hashPassword(password);
-    const eventResult = await sqlite.execute(
-      `INSERT INTO ${EVENTS_TABLE} (name, password_hash, location) VALUES (?, ?, ?)`,
-      [name, passwordHash, location || null]
-    );
+    const eventId = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
     
-    const eventId = Number(eventResult.lastInsertRowid);
+    await sqlite.execute(
+      `INSERT INTO ${EVENTS_TABLE} (id, name, password_hash, location) VALUES (?, ?, ?, ?)`,
+      [eventId, name, passwordHash, location || null]
+    );
     console.log(`✅ [API] Event created with ID: ${eventId}`);
     
     // Insert attendees
