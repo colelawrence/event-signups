@@ -17,7 +17,7 @@ export default function EventLinks({ eventId }: EventLinksProps) {
 
   const loadEventDetails = async () => {
     try {
-      const response = await fetch(`/api/events/${eventId}`);
+      const response = await fetch(`/api/${eventId}`);
       if (!response.ok) throw new Error('Failed to load event details');
       const data: EventDetailsResponse = await response.json();
       setEventDetails(data);
@@ -29,11 +29,11 @@ export default function EventLinks({ eventId }: EventLinksProps) {
   };
 
   const getSignInUrl = () => {
-    return `${window.location.origin}/events/${eventId}/signin`;
+    return `${window.location.origin}/${eventId}/signin`;
   };
 
   const getManageUrl = () => {
-    return `${window.location.origin}/events/${eventId}/manage`;
+    return `${window.location.origin}/${eventId}/manage`;
   };
 
   const copyToClipboard = (text: string) => {

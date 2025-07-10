@@ -29,7 +29,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
 
   const checkAuthentication = async () => {
     try {
-      const response = await fetch(`/api/events/${eventId}/details`);
+      const response = await fetch(`/api/${eventId}/details`);
       if (response.ok) {
         setIsAuthenticated(true);
       }
@@ -40,7 +40,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
 
   const authenticate = async () => {
     try {
-      const response = await fetch(`/api/events/${eventId}/auth`, {
+      const response = await fetch(`/api/${eventId}/auth`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
@@ -61,9 +61,9 @@ export default function EventManagement({ eventId }: EventManagementProps) {
     try {
       setLoading(true);
       const [detailsRes, attendeesRes, analyticsRes] = await Promise.all([
-        fetch(`/api/events/${eventId}/details`),
-        fetch(`/api/events/${eventId}/attendees`),
-        fetch(`/api/events/${eventId}/analytics`)
+        fetch(`/api/${eventId}/details`),
+        fetch(`/api/${eventId}/attendees`),
+        fetch(`/api/${eventId}/analytics`)
       ]);
 
       if (!detailsRes.ok || !attendeesRes.ok || !analyticsRes.ok) {
@@ -88,7 +88,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
 
   const exportCSV = async () => {
     try {
-      const response = await fetch(`/api/events/${eventId}/export`);
+      const response = await fetch(`/api/${eventId}/export`);
       if (!response.ok) throw new Error('Failed to export data');
       
       const blob = await response.blob();
@@ -106,7 +106,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
   };
 
   const getSignInUrl = () => {
-    return `${window.location.origin}/events/${eventId}/signin`;
+    return `${window.location.origin}/${eventId}/signin`;
   };
 
   const copySignInUrl = () => {
@@ -115,7 +115,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
 
   const logout = async () => {
     try {
-      await fetch(`/api/events/${eventId}/logout`, { method: 'POST' });
+      await fetch(`/api/${eventId}/logout`, { method: 'POST' });
       setIsAuthenticated(false);
     } catch (err) {
       // Handle logout error

@@ -20,7 +20,7 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
 
   const loadAttendees = async () => {
     try {
-      const response = await fetch(`/api/events/${eventId}/attendees`);
+      const response = await fetch(`/api/${eventId}/attendees`);
       if (!response.ok) throw new Error('Failed to load attendees');
       const data: AttendeeListResponse = await response.json();
       setAttendees(data.attendees);
@@ -36,7 +36,7 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
     setSignInResult(null);
     
     try {
-      const response = await fetch(`/api/events/${eventId}/signin`, {
+      const response = await fetch(`/api/${eventId}/signin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attendeeId } as SignInRequest)

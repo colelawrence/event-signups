@@ -28,13 +28,13 @@ export default function App() {
   
   // Parse route parameters
   const getEventId = () => {
-    const match = path.match(/\/events\/(\d+)/);
+    const match = path.match(/^\/(\d+)/);
     return match ? parseInt(match[1]) : null;
   };
   
   const renderPage = () => {
-    if (path === '/' || path === '/events/new') {
-      return <EventCreation onEventCreated={(eventId) => navigate(`/events/${eventId}`)} />;
+    if (path === '/' || path === '/new') {
+      return <EventCreation onEventCreated={(eventId) => navigate(`/${eventId}`)} />;
     }
     
     if (path.includes('/signin')) {
@@ -49,7 +49,7 @@ export default function App() {
       return <EventManagement eventId={eventId} />;
     }
     
-    if (path.match(/^\/events\/\d+$/)) {
+    if (path.match(/^\/\d+$/)) {
       const eventId = getEventId();
       if (!eventId) return <div>Invalid event ID</div>;
       return <EventLinks eventId={eventId} />;

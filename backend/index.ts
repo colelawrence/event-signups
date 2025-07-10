@@ -77,17 +77,22 @@ app.get("/", async c => {
 });
 
 // Route handlers for different pages
-app.get("/events/new", async c => {
+app.get("/new", async c => {
   const html = await readFile("/frontend/index.html", import.meta.url);
   return c.html(html);
 });
 
-app.get("/events/:eventId/signin", async c => {
+app.get("/:eventId/signin", async c => {
   const html = await readFile("/frontend/index.html", import.meta.url);
   return c.html(html);
 });
 
-app.get("/events/:eventId/manage", async c => {
+app.get("/:eventId/manage", async c => {
+  const html = await readFile("/frontend/index.html", import.meta.url);
+  return c.html(html);
+});
+
+app.get("/:eventId", async c => {
   const html = await readFile("/frontend/index.html", import.meta.url);
   return c.html(html);
 });
@@ -271,7 +276,7 @@ app.post("/api/events", async c => {
 });
 
 // Get basic event info (public, no auth required)
-app.get("/api/events/:eventId", async c => {
+app.get("/api/:eventId", async c => {
   const eventId = parseInt(c.req.param("eventId"));
   console.log(`📋 [API] Fetching basic event details for event ${eventId}`);
   
@@ -319,7 +324,7 @@ app.get("/api/events/:eventId", async c => {
 });
 
 // Get attendee list for sign-in (names only, no sensitive info)
-app.get("/api/events/:eventId/attendees", async c => {
+app.get("/api/:eventId/attendees", async c => {
   const eventId = parseInt(c.req.param("eventId"));
   console.log(`📋 [API] Fetching attendees for event ${eventId}`);
   
@@ -361,7 +366,7 @@ app.get("/api/events/:eventId/attendees", async c => {
 });
 
 // Sign in to event
-app.post("/api/events/:eventId/signin", async c => {
+app.post("/api/:eventId/signin", async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
@@ -421,7 +426,7 @@ app.post("/api/events/:eventId/signin", async c => {
 });
 
 // Authentication endpoint - login with password and create session
-app.post("/api/events/:eventId/auth", async c => {
+app.post("/api/:eventId/auth", async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
@@ -462,13 +467,13 @@ app.post("/api/events/:eventId/auth", async c => {
 });
 
 // Logout endpoint
-app.post("/api/events/:eventId/logout", async c => {
+app.post("/api/:eventId/logout", async c => {
   clearSessionCookie(c);
   return c.json({ success: true });
 });
 
 // Get event details (session protected)
-app.get("/api/events/:eventId/details", authMiddleware, async c => {
+app.get("/api/:eventId/details", authMiddleware, async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
@@ -518,7 +523,7 @@ app.get("/api/events/:eventId/details", authMiddleware, async c => {
 });
 
 // Get analytics (session protected)
-app.get("/api/events/:eventId/analytics", authMiddleware, async c => {
+app.get("/api/:eventId/analytics", authMiddleware, async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
@@ -577,7 +582,7 @@ app.get("/api/events/:eventId/analytics", authMiddleware, async c => {
 });
 
 // Export check-in data as CSV (session protected)
-app.get("/api/events/:eventId/export", authMiddleware, async c => {
+app.get("/api/:eventId/export", authMiddleware, async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
