@@ -1,56 +1,54 @@
 /** @jsxImportSource https://esm.sh/react@18.2.0 */
-import React, { useState } from "https://esm.sh/react@18.2.0";
-import TalkSubmissionForm from "./TalkSubmissionForm.tsx";
-import SubmissionSuccess from "./SubmissionSuccess.tsx";
+import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
+import EventCreation from "./EventCreation.tsx";
+import EventSignIn from "./EventSignIn.tsx";
+import EventManagement from "./EventManagement.tsx";
 
-export interface SubmissionData {
-  speakerName: string;
-  talkContext: string;
-  isOnBehalf: boolean;
-  submitterName?: string;
-}
-
-export interface SubmissionResult {
-  success: boolean;
-  submissionId: number;
-  discordInviteLink: string;
+// Simple client-side routing based on URL path
+function useRouter() {
+  const [path, setPath] = useState(window.location.pathname);
+  
+  useEffect(() => {
+    const handlePopState = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+  
+  const navigate = (newPath: string) => {
+    window.history.pushState({}, '', newPath);
+    setPath(newPath);
+  };
+  
+  return { path, navigate };
 }
 
 export default function App() {
-  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmission = async (data: SubmissionData) => {
-    setIsSubmitting(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/submissions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to submit");
-      }
-
-      setSubmissionResult(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setIsSubmitting(false);
-    }
+  const { path, navigate } = useRouter();
+  
+  // Parse route parameters
+  const getEventId = () => {
+    const match = path.match(/\/events\/(\d+)/);
+    return match ? parseInt(match[1]) : null;
   };
-
-  const handleReset = () => {
-    setSubmissionResult(null);
-    setError(null);
+  
+  const renderPage = () => {
+    if (path === '/' || path === '/events/new') {
+      return <EventCreation onEventCreated={(eventId) => navigate(`/events/${eventId}/manage`)} />;
+    }
+    
+    if (path.includes('/signin')) {
+      const eventId = getEventId();
+      if (!eventId) return <div>Invalid event ID</div>;
+      return <EventSignIn eventId={eventId} />;
+    }
+    
+    if (path.includes('/manage')) {
+      const eventId = getEventId();
+      if (!eventId) return <div>Invalid event ID</div>;
+      return <EventManagement eventId={eventId} />;
+    }
+    
+    return <div>Page not found</div>;
   };
 
   return (
@@ -101,30 +99,8 @@ export default function App() {
         .text-accent { color: var(--accent-primary); }
       `}</style>
       
-      <div className="min-h-screen bg-[var(--bg-primary)] py-12 px-4">
-        <div className="max-w-[480px] mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="font-heading text-4xl font-semibold text-primary mb-3">
-              Rust NYC Talk Submissions
-            </h1>
-            <p className="font-mono text-sm text-secondary tracking-wide">
-              Submit your talk proposal and get connected with our organizers
-            </p>
-          </div>
-
-        {submissionResult ? (
-          <SubmissionSuccess 
-            result={submissionResult} 
-            onReset={handleReset}
-          />
-        ) : (
-          <TalkSubmissionForm
-            onSubmit={handleSubmission}
-            isSubmitting={isSubmitting}
-            error={error}
-          />
-        )}
-        </div>
+      <div className="min-h-screen bg-[var(--bg-primary)]">
+        {renderPage()}
       </div>
     </>
   );
