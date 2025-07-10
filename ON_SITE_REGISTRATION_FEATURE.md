@@ -7,7 +7,7 @@ Allow event creators to enable on-site registration where attendees can register
 
 ### Event Configuration
 - [ ] Add checkbox "Enable on-site registration" to EventCreation form
-- [ ] Store `allow_onsite_registration` boolean field in Event table
+- [ ] Store `allow_onsite_registration` boolean field in Event table (consider migrations correctly)
 - [ ] Default to `false` for new events
 
 ### API Changes
@@ -28,7 +28,7 @@ Allow event creators to enable on-site registration where attendees can register
 - [ ] Add validation for duplicate names (case-insensitive)
 
 ### Database Schema
-- [ ] Add `allow_onsite_registration` column to events table (default false)
+- [ ] Add `allow_onsite_registration` column to events table (default false) (consider migrations carefully)
 - [ ] No changes to attendees or checkins tables required
 
 ## Technical Notes

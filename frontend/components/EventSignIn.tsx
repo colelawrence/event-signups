@@ -13,20 +13,21 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
   const [error, setError] = useState<string | null>(null);
   const [signInResult, setSignInResult] = useState<SignInResponse | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [dismissTimer, setDismissTimer] = useState<NodeJS.Timeout | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     loadAttendees();
   }, [eventId]);
 
-  // Cleanup timer on unmount
+  // Auto-dismiss success message after 3 seconds
   useEffect(() => {
-    return () => {
-      if (dismissTimer) {
-        clearTimeout(dismissTimer);
-      }
-    };
-  }, [dismissTimer]);
+    if (signInResult?.success) {
+      const timer = setTimeout(() => {
+        setSignInResult(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [signInResult]);
 
   const loadAttendees = async () => {
     try {
@@ -57,16 +58,6 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
       const result: SignInResponse = await response.json();
       setSignInResult(result);
       
-      // Set timer to dismiss welcome message and remove attendee from list
-      if (result.success) {
-        const timer = setTimeout(() => {
-          setSignInResult(null);
-          // Remove the attendee from the list by filtering them out
-          setAttendees(prev => prev.filter(a => a.id !== attendeeId));
-        }, 3000); // 3 seconds
-        setDismissTimer(timer);
-      }
-      
       // Refresh attendees to show updated status
       await loadAttendees();
       
@@ -79,10 +70,12 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
     }
   };
 
-  // Simple fuzzy search
-  const filteredAttendees = attendees.filter(attendee =>
-    attendee.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Simple fuzzy search with optional filtering of checked-in attendees
+  const filteredAttendees = attendees.filter(attendee => {
+    const matchesSearch = attendee.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const shouldShow = showAll || !attendee.checkedIn;
+    return matchesSearch && shouldShow;
+  });
 
   if (loading) {
     return (
@@ -118,26 +111,9 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
           Event Check-In
         </h1>
 
-        {signInResult && (
-          <div className={`mb-6 p-4 rounded-lg ${signInResult.success ? 'bg-green-100 border border-green-300' : 'bg-red-100 border border-red-300'}`}>
-            {signInResult.success ? (
-              <>
-                <h2 className="font-semibold text-green-800 mb-2">
-                  ✓ Welcome, {signInResult.attendeeName}!
-                </h2>
-                {signInResult.alreadySignedIn && (
-                  <p className="text-green-700 text-sm">
-                    Note: You were already signed in, but we've recorded this check-in too.
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-red-800">Failed to sign in. Please try again.</p>
-            )}
-          </div>
-        )}
 
-        <div className="mb-6">
+
+        <div className="mb-6 space-y-4">
           <input
             type="text"
             placeholder="Search for your name..."
@@ -145,6 +121,18 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full p-3 border border-[var(--border-default)] rounded-lg focus:outline-none focus:border-[var(--border-focus)]"
           />
+          
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="px-4 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
+            >
+              {showAll ? 'Hide Checked-In' : 'Show All'}
+            </button>
+            <span className="text-sm text-[var(--text-muted)]">
+              {filteredAttendees.length} attendee{filteredAttendees.length !== 1 ? 's' : ''} shown
+            </span>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -183,6 +171,42 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
           )}
         </div>
       </div>
+      
+      {/* Fixed bottom flash message */}
+      {signInResult && (
+        <div className={`fixed bottom-4 left-4 right-4 mx-auto max-w-md p-4 rounded-lg shadow-lg ${signInResult.success ? 'bg-green-100 border border-green-300' : 'bg-red-100 border border-red-300'}`}>
+          {signInResult.success ? (
+            <>
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-green-800">
+                  ✓ Welcome, {signInResult.attendeeName}!
+                </h2>
+                <button
+                  onClick={() => setSignInResult(null)}
+                  className="text-green-600 hover:text-green-800 text-lg"
+                >
+                  ×
+                </button>
+              </div>
+              {signInResult.alreadySignedIn && (
+                <p className="text-green-700 text-sm mt-1">
+                  Note: You were already signed in, but we've recorded this check-in too.
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-red-800">Failed to sign in. Please try again.</p>
+              <button
+                onClick={() => setSignInResult(null)}
+                className="text-red-600 hover:text-red-800 text-lg"
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
