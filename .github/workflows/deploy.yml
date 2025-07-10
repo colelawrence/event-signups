@@ -17,7 +17,7 @@ jobs:
         deno-version: v2.x
     
     - name: Install Val Town CLI
-      run: deno install -A --global -f https://esm.sh/gh/val-town/vt@0.3.0/cli.ts
+      run: deno install -grAf jsr:@valtown/vt
     
     - name: Deploy to Val Town
       run: vt push
