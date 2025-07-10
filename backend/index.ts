@@ -90,7 +90,7 @@ function verifyPassword(password: string, hash: string): boolean {
   return hashPassword(password) === hash;
 }
 
-// CSV parsing utility
+// CSV parsing utility with proper quoted field handling
 function parseCSV(csvContent: string): { attendees: Array<{name: string, external_id?: string}>, errors: string[] } {
   const lines = csvContent.trim().split('\n');
   const errors: string[] = [];
@@ -101,8 +101,41 @@ function parseCSV(csvContent: string): { attendees: Array<{name: string, externa
     return { attendees, errors };
   }
   
+  // Parse CSV row with proper quote handling
+  function parseCSVRow(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    let i = 0;
+    
+    while (i < line.length) {
+      const char = line[i];
+      
+      if (char === '"' && !inQuotes) {
+        inQuotes = true;
+      } else if (char === '"' && inQuotes) {
+        // Check for escaped quote
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++; // Skip the escaped quote
+        } else {
+          inQuotes = false;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+      i++;
+    }
+    
+    result.push(current.trim());
+    return result;
+  }
+  
   // Parse header row
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+  const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
   console.log(`📋 [CSV] Found headers:`, headers);
   
   // Find name columns - flexible matching
@@ -110,28 +143,31 @@ function parseCSV(csvContent: string): { attendees: Array<{name: string, externa
   let firstNameIndex = -1;
   let lastNameIndex = -1;
   let idIndex = -1;
+  let emailIndex = -1;
   
   headers.forEach((header, index) => {
     const cleanHeader = header.toLowerCase();
-    if (cleanHeader.includes('name') && !cleanHeader.includes('first') && !cleanHeader.includes('last') && !cleanHeader.includes('given') && !cleanHeader.includes('family')) {
+    if (cleanHeader === 'name' || (cleanHeader.includes('name') && !cleanHeader.includes('first') && !cleanHeader.includes('last') && !cleanHeader.includes('given') && !cleanHeader.includes('family'))) {
       nameIndex = index;
-    } else if (cleanHeader.includes('first') || cleanHeader.includes('given')) {
+    } else if (cleanHeader.includes('first') || cleanHeader === 'first name') {
       firstNameIndex = index;
-    } else if (cleanHeader.includes('last') || cleanHeader.includes('family') || cleanHeader.includes('surname')) {
+    } else if (cleanHeader.includes('last') || cleanHeader === 'last name' || cleanHeader.includes('family') || cleanHeader.includes('surname')) {
       lastNameIndex = index;
-    } else if (cleanHeader.includes('id') && !cleanHeader.includes('email')) {
+    } else if ((cleanHeader.includes('id') || cleanHeader === 'member id') && !cleanHeader.includes('email')) {
       idIndex = index;
+    } else if (cleanHeader.includes('email') || cleanHeader === 'email') {
+      emailIndex = index;
     }
   });
   
-  console.log(`📋 [CSV] Column mapping - name: ${nameIndex}, firstName: ${firstNameIndex}, lastName: ${lastNameIndex}, id: ${idIndex}`);
+  console.log(`📋 [CSV] Column mapping - name: ${nameIndex}, firstName: ${firstNameIndex}, lastName: ${lastNameIndex}, id: ${idIndex}, email: ${emailIndex}`);
   
   // Process data rows
   for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(',').map(cell => cell.trim().replace(/"/g, ''));
+    const row = parseCSVRow(lines[i]);
     
     if (row.length !== headers.length) {
-      errors.push(`Row ${i + 1}: Column count mismatch`);
+      errors.push(`Row ${i + 1}: Column count mismatch (expected ${headers.length}, got ${row.length})`);
       continue;
     }
     
