@@ -13,10 +13,20 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
   const [error, setError] = useState<string | null>(null);
   const [signInResult, setSignInResult] = useState<SignInResponse | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [dismissTimer, setDismissTimer] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadAttendees();
   }, [eventId]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (dismissTimer) {
+        clearTimeout(dismissTimer);
+      }
+    };
+  }, [dismissTimer]);
 
   const loadAttendees = async () => {
     try {
@@ -46,6 +56,16 @@ export default function EventSignIn({ eventId }: EventSignInProps) {
       
       const result: SignInResponse = await response.json();
       setSignInResult(result);
+      
+      // Set timer to dismiss welcome message and remove attendee from list
+      if (result.success) {
+        const timer = setTimeout(() => {
+          setSignInResult(null);
+          // Remove the attendee from the list by filtering them out
+          setAttendees(prev => prev.filter(a => a.id !== attendeeId));
+        }, 3000); // 3 seconds
+        setDismissTimer(timer);
+      }
       
       // Refresh attendees to show updated status
       await loadAttendees();
