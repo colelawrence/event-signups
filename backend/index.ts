@@ -259,7 +259,8 @@ app.post("/api/events", async c => {
     }
 
     // Verify event was created
-    const verifyEvent = await sqlite.execute(`SELECT id, name FROM ${EVENTS_TABLE} WHERE id = ?`, [eventId]);
+    const verifyEventResult = await sqlite.execute(`SELECT id, name FROM ${EVENTS_TABLE} WHERE id = ?`, [eventId]);
+    const verifyEvent = verifyEventResult.rows || verifyEventResult;
     console.log(`🔍 [API] Event verification: found ${verifyEvent.length} events with ID ${eventId}`);
     if (verifyEvent.length > 0) {
       console.log(`🔍 [API] Event details: ${JSON.stringify(verifyEvent[0])}`);
@@ -283,7 +284,8 @@ app.post("/api/events", async c => {
     }
 
     // Verify attendees were inserted
-    const verifyAttendees = await sqlite.execute(`SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?`, [eventId]);
+    const verifyAttendeesResult = await sqlite.execute(`SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?`, [eventId]);
+    const verifyAttendees = verifyAttendeesResult.rows || verifyAttendeesResult;
     const actualAttendeeCount = Number(verifyAttendees[0]?.count || 0);
     console.log(`🔍 [API] Attendee verification: expected ${attendees.length}, found ${actualAttendeeCount} in database`);
 
@@ -330,8 +332,10 @@ app.get("/api/:eventId", async c => {
       )
     `, [eventId]);
     
-    const attendeeCount = Number(attendeeCountResult[0]?.count || 0);
-    const checkedInCount = Number(checkedInCountResult[0]?.count || 0);
+    const attendeeCountRows = attendeeCountResult.rows || attendeeCountResult;
+    const checkedInCountRows = checkedInCountResult.rows || checkedInCountResult;
+    const attendeeCount = Number(attendeeCountRows[0]?.count || 0);
+    const checkedInCount = Number(checkedInCountRows[0]?.count || 0);
     
     console.log(`📋 [API] Event ${eventId} found: ${attendeeCount} attendees, ${checkedInCount} checked in`);
     
@@ -360,10 +364,11 @@ app.get("/api/:eventId/attendees", async c => {
   try {
     // First check if event exists
     console.log(`🔍 [API] Checking if event ${eventId} exists in table ${EVENTS_TABLE}`);
-    const eventCheck = await sqlite.execute(`
+    const eventCheckResult = await sqlite.execute(`
       SELECT id FROM ${EVENTS_TABLE} WHERE id = ?
     `, [eventId]);
     
+    const eventCheck = eventCheckResult.rows || eventCheckResult;
     console.log(`🔍 [API] Event check result: found ${eventCheck.length} events with ID ${eventId}`);
     if (eventCheck.length === 0) {
       console.log(`❌ [API] Event ${eventId} not found`);
@@ -372,7 +377,7 @@ app.get("/api/:eventId/attendees", async c => {
     
     // Get attendees with check-in status
     console.log(`🔍 [API] Querying attendees from table ${ATTENDEES_TABLE} for event ${eventId}`);
-    const attendees = await sqlite.execute(`
+    const attendeesResult = await sqlite.execute(`
       SELECT a.id, a.name, 
              CASE WHEN c.id IS NOT NULL THEN 1 ELSE 0 END as checked_in
       FROM ${ATTENDEES_TABLE} a
@@ -381,6 +386,7 @@ app.get("/api/:eventId/attendees", async c => {
       ORDER BY a.name
     `, [eventId]);
     
+    const attendees = attendeesResult.rows || attendeesResult;
     console.log(`📋 [API] Found ${attendees.length} attendees for event ${eventId}`);
     
     // Log first few attendees for debugging
@@ -419,21 +425,23 @@ app.post("/api/:eventId/signin", async c => {
     }
     
     // Verify attendee belongs to this event
-    const attendee = await sqlite.execute(
+    const attendeeResult = await sqlite.execute(
       `SELECT * FROM ${ATTENDEES_TABLE} WHERE id = ? AND event_id = ?`,
       [attendeeId, eventId]
     );
     
+    const attendee = attendeeResult.rows || attendeeResult;
     if (attendee.length === 0) {
       return c.json({ error: "Attendee not found for this event" }, 404);
     }
     
     // Check if already signed in
-    const existingCheckIn = await sqlite.execute(
+    const existingCheckInResult = await sqlite.execute(
       `SELECT * FROM ${CHECKINS_TABLE} WHERE event_id = ? AND attendee_id = ?`,
       [eventId, attendeeId]
     );
     
+    const existingCheckIn = existingCheckInResult.rows || existingCheckInResult;
     if (existingCheckIn.length > 0) {
       console.log(`⚠️ [API] Attendee ${attendee[0].name} already signed in`);
       // TODO: Consider security implications of multiple sign-in attempts
@@ -479,11 +487,12 @@ app.post("/api/:eventId/auth", async c => {
     }
     
     // Get event
-    const events = await sqlite.execute(
+    const eventsResult = await sqlite.execute(
       `SELECT * FROM ${EVENTS_TABLE} WHERE id = ?`,
       [eventId]
     );
     
+    const events = eventsResult.rows || eventsResult;
     if (events.length === 0) {
       return c.json({ error: "Event not found" }, 404);
     }
@@ -524,11 +533,12 @@ app.get("/api/:eventId/details", authMiddleware, async c => {
     }
     
     // Get event
-    const events = await sqlite.execute(
+    const eventsResult = await sqlite.execute(
       `SELECT * FROM ${EVENTS_TABLE} WHERE id = ?`,
       [eventId]
     );
     
+    const events = eventsResult.rows || eventsResult;
     if (events.length === 0) {
       return c.json({ error: "Event not found" }, 404);
     }
@@ -536,15 +546,18 @@ app.get("/api/:eventId/details", authMiddleware, async c => {
     const event = events[0];
     
     // Get counts
-    const attendeeCount = await sqlite.execute(
+    const attendeeCountResult = await sqlite.execute(
       `SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?`,
       [eventId]
     );
     
-    const checkedInCount = await sqlite.execute(
+    const checkedInCountResult = await sqlite.execute(
       `SELECT COUNT(*) as count FROM ${CHECKINS_TABLE} WHERE event_id = ?`,
       [eventId]
     );
+    
+    const attendeeCountRows = attendeeCountResult.rows || attendeeCountResult;
+    const checkedInCountRows = checkedInCountResult.rows || checkedInCountResult;
     
     return c.json({
       event: {
@@ -553,8 +566,8 @@ app.get("/api/:eventId/details", authMiddleware, async c => {
         location: event.location,
         created_at: event.created_at
       },
-      attendeeCount: attendeeCount[0].count,
-      checkedInCount: checkedInCount[0].count
+      attendeeCount: attendeeCountRows[0].count,
+      checkedInCount: checkedInCountRows[0].count
     });
     
   } catch (error) {
@@ -633,23 +646,26 @@ app.get("/api/:eventId/export", authMiddleware, async c => {
     }
     
     // Get event name
-    const events = await sqlite.execute(
+    const eventsResult = await sqlite.execute(
       `SELECT name FROM ${EVENTS_TABLE} WHERE id = ?`,
       [eventId]
     );
     
+    const events = eventsResult.rows || eventsResult;
     if (events.length === 0) {
       return c.json({ error: "Event not found" }, 404);
     }
     
     // Get all attendees with check-in data
-    const data = await sqlite.execute(`
+    const dataResult = await sqlite.execute(`
       SELECT a.name, a.external_id, c.checked_in_at
       FROM ${ATTENDEES_TABLE} a
       LEFT JOIN ${CHECKINS_TABLE} c ON a.id = c.attendee_id
       WHERE a.event_id = ?
       ORDER BY a.name
     `, [eventId]);
+    
+    const data = dataResult.rows || dataResult;
     
     // Generate CSV
     const csvRows = [
