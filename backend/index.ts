@@ -261,8 +261,19 @@ app.post("/api/events", async c => {
 // Get attendee list for sign-in (names only, no sensitive info)
 app.get("/api/events/:eventId/attendees", async c => {
   const eventId = parseInt(c.req.param("eventId"));
+  console.log(`📋 [API] Fetching attendees for event ${eventId}`);
   
   try {
+    // First check if event exists
+    const eventCheck = await sqlite.execute(`
+      SELECT id FROM ${EVENTS_TABLE} WHERE id = ?
+    `, [eventId]);
+    
+    if (eventCheck.length === 0) {
+      console.log(`❌ [API] Event ${eventId} not found`);
+      return c.json({ error: "Event not found" }, 404);
+    }
+    
     // Get attendees with check-in status
     const attendees = await sqlite.execute(`
       SELECT a.id, a.name, 
@@ -272,6 +283,8 @@ app.get("/api/events/:eventId/attendees", async c => {
       WHERE a.event_id = ?
       ORDER BY a.name
     `, [eventId]);
+    
+    console.log(`📋 [API] Found ${attendees.length} attendees for event ${eventId}`);
     
     return c.json({
       attendees: attendees.map(row => ({

@@ -126,7 +126,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
           
           <button
             onClick={authenticate}
-            className="w-full py-3 bg-[var(--accent-primary)] text-white rounded-lg hover:bg-[var(--accent-secondary)] transition-colors"
+            className="w-full py-3 bg-[var(--accent-primary)] text-[var(--text-primary)] font-mono rounded-lg hover:bg-[var(--accent-secondary)] transition-colors"
           >
             Access Event
           </button>
@@ -153,7 +153,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
           <p className="text-[var(--error)] mb-4">{error}</p>
           <button
             onClick={() => { setError(null); loadData(); }}
-            className="px-4 py-2 bg-[var(--accent-primary)] text-white rounded hover:bg-[var(--accent-secondary)]"
+            className="px-4 py-2 bg-[var(--accent-primary)] text-[var(--text-primary)] font-mono rounded hover:bg-[var(--accent-secondary)]"
           >
             Try Again
           </button>
@@ -183,7 +183,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
             </code>
             <button
               onClick={copySignInUrl}
-              className="px-3 py-2 bg-[var(--accent-primary)] text-white rounded hover:bg-[var(--accent-secondary)] text-sm"
+              className="px-3 py-2 bg-[var(--accent-primary)] text-[var(--text-primary)] font-mono rounded hover:bg-[var(--accent-secondary)] text-sm"
             >
               Copy
             </button>
@@ -244,7 +244,7 @@ export default function EventManagement({ eventId }: EventManagementProps) {
               <h3 className="font-semibold text-[var(--text-primary)]">Attendees</h3>
               <button
                 onClick={exportCSV}
-                className="px-4 py-2 bg-[var(--accent-primary)] text-white rounded hover:bg-[var(--accent-secondary)] text-sm"
+                className="px-4 py-2 bg-[var(--accent-primary)] text-[var(--text-primary)] font-mono rounded hover:bg-[var(--accent-secondary)] text-sm"
               >
                 Export CSV
               </button>
