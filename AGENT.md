@@ -1,4 +1,4 @@
-# Agent Configuration for Talk Submission System
+# Agent Configuration for Event Check-In System
 
 ## Commands
 - **No explicit test/lint commands** - Val Town platform handles these automatically
@@ -6,19 +6,18 @@
 - **Database**: SQLite migrations run automatically on startup in backend/index.ts
 
 ## Architecture
-- **Val Town Project**: Deno-based Discord bot for talk submissions with React frontend
-- **Backend**: Hono API server (backend/index.ts) handling submissions and Discord integration
+- **Val Town Project**: Deno-based event check-in system with React frontend
+- **Backend**: Hono API server (backend/index.ts) handling event management and check-ins
 - **Frontend**: React 18.2.0 with TypeScript (frontend/index.tsx, components/)
-- **Database**: SQLite with talk submissions table (talk_submissions_3)
-- **Discord Integration**: Bot creates channels, sends notifications, generates invite links
+- **Database**: SQLite with events_1, attendees_1, and checkins_1 tables
+- **Features**: Password-protected event creation, CSV attendee upload, fuzzy search, analytics
 - **Shared**: TypeScript types and utilities (shared/types.ts)
 
-## Discord API Design Notes
-- **Role Mentions**: Use `<@&ROLE_ID>` format in message content
-- **User Mentions**: Use `<@USER_ID>` format in message content
-- **Channel Mentions**: Use `<#CHANNEL_ID>` format in message content
-- **Special Mentions**: `@everyone` and `@here` work as plain text (no ID needed)
-- **Permissions**: Role must be mentionable OR bot needs "Mention Everyone" permission
+## Core Functionality
+- **Event Management**: Create events with attendee lists via CSV upload
+- **Check-In Process**: Attendees find their name using fuzzy search and check in with one click
+- **Analytics**: Track check-in rates, date-based charts, export data as CSV
+- **Security**: Password protection for event management, multiple check-in tracking
 
 ## Code Style (from .cursorrules)
 - **Language**: TypeScript/TSX with React 18.2.0
