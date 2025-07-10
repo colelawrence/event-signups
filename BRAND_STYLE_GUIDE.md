@@ -56,11 +56,12 @@ A nostalgic minimal, slightly technical theme that evokes the feeling of early c
 - Generous padding (12px)
 
 #### Buttons
-- Primary: `--accent-primary` background, dark text
-- Secondary: `--bg-tertiary` background, dark text
+- Primary: `--accent-primary` background, `--text-primary` (dark) text
+- Secondary: `--bg-tertiary` background, `--text-primary` (dark) text
 - Padding: 12px 24px
 - Border radius: 4px
 - Monospace font
+- **Critical**: Never use white text on amber backgrounds - poor contrast and accessibility
 
 #### Typography Scale
 - H1: 24px / text-2xl (primary headings)

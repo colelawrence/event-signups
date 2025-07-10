@@ -171,7 +171,7 @@ export default function EventCreation({ onEventCreated }: EventCreationProps) {
             <button
               type="submit"
               disabled={isSubmitting || !formData.name || !formData.password || !formData.csvContent}
-              className="w-full bg-[var(--accent-primary)] text-white py-2 px-4 rounded-md hover:bg-[var(--accent-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-[var(--accent-primary)] text-[var(--text-primary)] font-mono py-3 px-6 rounded hover:bg-[var(--accent-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting ? 'Creating Event...' : 'Create Event'}
             </button>
