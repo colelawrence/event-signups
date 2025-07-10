@@ -308,9 +308,11 @@ app.get("/api/:eventId", async c => {
   console.log(`📋 [API] Fetching basic event details for event ${eventId}`);
   
   try {
-    const event = await sqlite.execute(`
+    const eventResult = await sqlite.execute(`
       SELECT id, name, location, created_at FROM ${EVENTS_TABLE} WHERE id = ?
     `, [eventId]);
+    
+    const event = eventResult.rows || eventResult;
     
     if (event.length === 0) {
       console.log(`❌ [API] Event ${eventId} not found`);
