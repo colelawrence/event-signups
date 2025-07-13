@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
 import EventCreation from "./EventCreation.tsx";
 import EventSignIn from "./EventSignIn.tsx";
 import EventManagement from "./EventManagement.tsx";
+import EventLinks from "./EventLinks.tsx";
 import AddAttendee from "./AddAttendee.tsx";
 
 // Simple client-side routing based on URL path
@@ -28,13 +29,13 @@ export default function App() {
   
   // Parse route parameters
   const getEventId = () => {
-    const match = path.match(/\/events\/(\d+)/);
+    const match = path.match(/^\/(\d+)/);
     return match ? parseInt(match[1]) : null;
   };
   
   const renderPage = () => {
-    if (path === '/' || path === '/events/new') {
-      return <EventCreation onEventCreated={(eventId) => navigate(`/events/${eventId}/manage`)} />;
+    if (path === '/' || path === '/new') {
+      return <EventCreation onEventCreated={(eventId) => navigate(`/${eventId}`)} />;
     }
     
     if (path.includes('/signin')) {
@@ -47,6 +48,12 @@ export default function App() {
       const eventId = getEventId();
       if (!eventId) return <div>Invalid event ID</div>;
       return <EventManagement eventId={eventId} />;
+    }
+    
+    if (path.match(/^\/\d+$/)) {
+      const eventId = getEventId();
+      if (!eventId) return <div>Invalid event ID</div>;
+      return <EventLinks eventId={eventId} />;
     }
     
     if (path.includes('/add-attendee')) {

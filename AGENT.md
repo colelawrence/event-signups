@@ -9,7 +9,7 @@
 - **Val Town Project**: Deno-based event check-in system with React frontend
 - **Backend**: Hono API server (backend/index.ts) handling event management and check-ins
 - **Frontend**: React 18.2.0 with TypeScript (frontend/index.tsx, components/)
-- **Database**: SQLite with events_1, attendees_1, and checkins_1 tables
+- **Database**: SQLite with events_4, attendees_4, checkins_4, and sessions_2 tables
 - **Features**: Password-protected event creation, CSV attendee upload, fuzzy search, analytics
 - **Shared**: TypeScript types and utilities (shared/types.ts)
 
@@ -29,3 +29,6 @@
 - **Error Handling**: Let errors bubble up with context, avoid empty catch blocks
 - **Database**: Change table names (e.g., _3, _4) when modifying schemas instead of ALTER TABLE
 - **Platform**: Use Val Town utils for file operations (readFile, serveFile)
+- **SQLite**: ALWAYS handle query results properly - use `result.rows || result` pattern to access data
+  - WRONG: `const result = await sqlite.execute(query); result[0].column`
+  - CORRECT: `const rawResult = await sqlite.execute(query); const result = rawResult.rows || rawResult; result[0].column`

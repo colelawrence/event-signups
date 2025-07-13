@@ -48,7 +48,7 @@ The system uses SQLite with the following schema:
 
 ```sql
 -- Events table
-CREATE TABLE events_1 (
+CREATE TABLE events_N (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
@@ -57,21 +57,21 @@ CREATE TABLE events_1 (
 );
 
 -- Attendees table  
-CREATE TABLE attendees_1 (
+CREATE TABLE attendees_N (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id INTEGER NOT NULL,
   name TEXT NOT NULL,
   external_id TEXT,
-  FOREIGN KEY (event_id) REFERENCES events_1(id)
+  FOREIGN KEY (event_id) REFERENCES events_2(id)
 );
 
 -- Check-ins table
-CREATE TABLE checkins_1 (
+CREATE TABLE checkins_N (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id INTEGER NOT NULL,
   attendee_id INTEGER NOT NULL,
   checked_in_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (event_id) REFERENCES events_1(id),
+  FOREIGN KEY (event_id) REFERENCES events_2(id),
   FOREIGN KEY (attendee_id) REFERENCES attendees_1(id)
 );
 ```
@@ -79,18 +79,18 @@ CREATE TABLE checkins_1 (
 ## API Endpoints
 
 - `POST /api/events` - Create a new event
-- `GET /api/events/:eventId` - Get event details (password protected)
-- `POST /api/events/:eventId/signin` - Sign in to an event
-- `GET /api/events/:eventId/attendees` - Get attendee list for sign-in (names only)
-- `GET /api/events/:eventId/analytics` - Get check-in analytics (password protected)
-- `GET /api/events/:eventId/export` - Export check-in data as CSV (password protected)
+- `GET /api/:eventId` - Get event details (password protected)
+- `POST /api/:eventId/signin` - Sign in to an event
+- `GET /api/:eventId/attendees` - Get attendee list for sign-in (names only)
+- `GET /api/:eventId/analytics` - Get check-in analytics (password protected)
+- `GET /api/:eventId/export` - Export check-in data as CSV (password protected)
 
 ## Routes
 
 - `/` - Home page with event creation
-- `/events/new` - Event creation form
-- `/events/:eventId/signin` - Event sign-in page
-- `/events/:eventId/manage` - Event management dashboard (password protected)
+- `/new` - Event creation form
+- `/:eventId/signin` - Event sign-in page
+- `/:eventId/manage` - Event management dashboard (password protected)
 
 ## Usage
 

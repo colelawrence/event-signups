@@ -2,6 +2,15 @@ import { Hono } from "https://esm.sh/hono@3.11.7";
 import { readFile, serveFile } from "https://esm.town/v/std/utils@85-main/index.ts";
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
 import { getCookie, setCookie } from "https://esm.sh/hono@3.11.7/cookie";
+import { 
+  createSession, 
+  setSessionCookie, 
+  clearSessionCookie,
+  authMiddleware,
+  verifyEventAccess,
+  csrfMiddleware
+} from "./auth.ts";
+import { initDatabase, TABLES } from "./database.ts";
 
 const app = new Hono();
 
@@ -10,45 +19,7 @@ app.onError((err, c) => {
   throw err;
 });
 
-// Database table names
-const EVENTS_TABLE = "events_1";
-const ATTENDEES_TABLE = "attendees_1"; 
-const CHECKINS_TABLE = "checkins_1";
-
-// Initialize database
-async function initDatabase() {
-  console.log(`💾 [DB] Initializing database tables`);
-  
-  // Events table
-  await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${EVENTS_TABLE} (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    location TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  
-  // Attendees table
-  await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${ATTENDEES_TABLE} (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    external_id TEXT,
-    FOREIGN KEY (event_id) REFERENCES ${EVENTS_TABLE}(id)
-  )`);
-  
-  // Check-ins table
-  await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${CHECKINS_TABLE} (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id INTEGER NOT NULL,
-    attendee_id INTEGER NOT NULL,
-    checked_in_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (event_id) REFERENCES ${EVENTS_TABLE}(id),
-    FOREIGN KEY (attendee_id) REFERENCES ${ATTENDEES_TABLE}(id)
-  )`);
-  
-  console.log(`✅ [DB] Database initialization complete`);
-}
+// Database table names imported from centralized schema
 
 // Initialize database on startup
 await initDatabase();
@@ -65,17 +36,22 @@ app.get("/", async c => {
 });
 
 // Route handlers for different pages
-app.get("/events/new", async c => {
+app.get("/new", async c => {
   const html = await readFile("/frontend/index.html", import.meta.url);
   return c.html(html);
 });
 
-app.get("/events/:eventId/signin", async c => {
+app.get("/:eventId/signin", async c => {
   const html = await readFile("/frontend/index.html", import.meta.url);
   return c.html(html);
 });
 
-app.get("/events/:eventId/manage", async c => {
+app.get("/:eventId/manage", async c => {
+  const html = await readFile("/frontend/index.html", import.meta.url);
+  return c.html(html);
+});
+
+app.get("/:eventId", async c => {
   const html = await readFile("/frontend/index.html", import.meta.url);
   return c.html(html);
 });
@@ -95,7 +71,7 @@ function verifyPassword(password: string, hash: string): boolean {
   return hashPassword(password) === hash;
 }
 
-// CSV parsing utility
+// CSV parsing utility with proper quoted field handling
 function parseCSV(csvContent: string): { attendees: Array<{name: string, external_id?: string}>, errors: string[] } {
   const lines = csvContent.trim().split('\n');
   const errors: string[] = [];
@@ -106,8 +82,41 @@ function parseCSV(csvContent: string): { attendees: Array<{name: string, externa
     return { attendees, errors };
   }
   
+  // Parse CSV row with proper quote handling
+  function parseCSVRow(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    let i = 0;
+    
+    while (i < line.length) {
+      const char = line[i];
+      
+      if (char === '"' && !inQuotes) {
+        inQuotes = true;
+      } else if (char === '"' && inQuotes) {
+        // Check for escaped quote
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++; // Skip the escaped quote
+        } else {
+          inQuotes = false;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+      i++;
+    }
+    
+    result.push(current.trim());
+    return result;
+  }
+  
   // Parse header row
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+  const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
   console.log(`📋 [CSV] Found headers:`, headers);
   
   // Find name columns - flexible matching
@@ -115,28 +124,31 @@ function parseCSV(csvContent: string): { attendees: Array<{name: string, externa
   let firstNameIndex = -1;
   let lastNameIndex = -1;
   let idIndex = -1;
+  let emailIndex = -1;
   
   headers.forEach((header, index) => {
     const cleanHeader = header.toLowerCase();
-    if (cleanHeader.includes('name') && !cleanHeader.includes('first') && !cleanHeader.includes('last') && !cleanHeader.includes('given') && !cleanHeader.includes('family')) {
+    if (cleanHeader === 'name' || (cleanHeader.includes('name') && !cleanHeader.includes('first') && !cleanHeader.includes('last') && !cleanHeader.includes('given') && !cleanHeader.includes('family'))) {
       nameIndex = index;
-    } else if (cleanHeader.includes('first') || cleanHeader.includes('given')) {
+    } else if (cleanHeader.includes('first') || cleanHeader === 'first name') {
       firstNameIndex = index;
-    } else if (cleanHeader.includes('last') || cleanHeader.includes('family') || cleanHeader.includes('surname')) {
+    } else if (cleanHeader.includes('last') || cleanHeader === 'last name' || cleanHeader.includes('family') || cleanHeader.includes('surname')) {
       lastNameIndex = index;
-    } else if (cleanHeader.includes('id') && !cleanHeader.includes('email')) {
+    } else if ((cleanHeader.includes('id') || cleanHeader === 'member id') && !cleanHeader.includes('email')) {
       idIndex = index;
+    } else if (cleanHeader.includes('email') || cleanHeader === 'email') {
+      emailIndex = index;
     }
   });
   
-  console.log(`📋 [CSV] Column mapping - name: ${nameIndex}, firstName: ${firstNameIndex}, lastName: ${lastNameIndex}, id: ${idIndex}`);
+  console.log(`📋 [CSV] Column mapping - name: ${nameIndex}, firstName: ${firstNameIndex}, lastName: ${lastNameIndex}, id: ${idIndex}, email: ${emailIndex}`);
   
   // Process data rows
   for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(',').map(cell => cell.trim().replace(/"/g, ''));
+    const row = parseCSVRow(lines[i]);
     
     if (row.length !== headers.length) {
-      errors.push(`Row ${i + 1}: Column count mismatch`);
+      errors.push(`Row ${i + 1}: Column count mismatch (expected ${headers.length}, got ${row.length})`);
       continue;
     }
     
@@ -194,25 +206,54 @@ app.post("/api/events", async c => {
       return c.json({ error: "No valid attendees found in CSV", csvErrors: errors }, 400);
     }
     
-    // Create event
+    // Create event with unix timestamp as ID
     const passwordHash = hashPassword(password);
-    const eventResult = await sqlite.execute(
-      `INSERT INTO ${EVENTS_TABLE} (name, password_hash, location) VALUES (?, ?, ?)`,
-      [name, passwordHash, location || null]
-    );
-    
-    const eventId = Number(eventResult.lastInsertRowid);
-    console.log(`✅ [API] Event created with ID: ${eventId}`);
-    
-    // Insert attendees
-    for (const attendee of attendees) {
+    const eventId = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
+    console.log(`📋 [API] Creating event with ID: ${eventId}, name: "${name}", location: "${location || 'N/A'}"`);
+
+    try {
       await sqlite.execute(
-        `INSERT INTO ${ATTENDEES_TABLE} (event_id, name, external_id) VALUES (?, ?, ?)`,
-        [eventId, attendee.name, attendee.external_id || null]
+        `INSERT INTO ${TABLES.EVENTS} (id, name, password_hash, location) VALUES (?, ?, ?, ?)`,
+        [eventId, name, passwordHash, location || null]
       );
+      console.log(`✅ [API] Event successfully inserted into database with ID: ${eventId}`);
+    } catch (error) {
+      console.error(`💥 [API] Failed to insert event:`, error);
+      throw error;
     }
-    
-    console.log(`✅ [API] Added ${attendees.length} attendees to event`);
+
+    // Verify event was created
+    const verifyEventResult = await sqlite.execute(`SELECT id, name FROM ${TABLES.EVENTS} WHERE id = ?`, [eventId]);
+    const verifyEvent = verifyEventResult.rows || verifyEventResult;
+    console.log(`🔍 [API] Event verification: found ${verifyEvent.length} events with ID ${eventId}`);
+    if (verifyEvent.length > 0) {
+      console.log(`🔍 [API] Event details: ${JSON.stringify(verifyEvent[0])}`);
+    }
+
+    // Insert attendees
+    console.log(`📋 [API] Starting to insert ${attendees.length} attendees...`);
+    let insertedCount = 0;
+    for (const attendee of attendees) {
+      try {
+        await sqlite.execute(
+          `INSERT INTO ${TABLES.ATTENDEES} (event_id, name, external_id) VALUES (?, ?, ?)`,
+          [eventId, attendee.name, attendee.external_id || null]
+        );
+        insertedCount++;
+        console.log(`👤 [API] Inserted attendee ${insertedCount}/${attendees.length}: "${attendee.name}" (external_id: ${attendee.external_id || 'N/A'})`);
+      } catch (error) {
+        console.error(`💥 [API] Failed to insert attendee "${attendee.name}":`, error);
+        throw error;
+      }
+    }
+
+    // Verify attendees were inserted
+    const verifyAttendeesResult = await sqlite.execute(`SELECT COUNT(*) as count FROM ${TABLES.ATTENDEES} WHERE event_id = ?`, [eventId]);
+    const verifyAttendees = verifyAttendeesResult.rows || verifyAttendeesResult;
+    const actualAttendeeCount = Number(verifyAttendees[0]?.count || 0);
+    console.log(`🔍 [API] Attendee verification: expected ${attendees.length}, found ${actualAttendeeCount} in database`);
+
+    console.log(`✅ [API] Successfully added ${insertedCount} attendees to event ${eventId}`);
     
     return c.json({
       success: true,
@@ -227,37 +268,116 @@ app.post("/api/events", async c => {
   }
 });
 
-// Get attendee list for sign-in (names only, no sensitive info)
-app.get("/api/events/:eventId/attendees", async c => {
+// Get basic event info (public, no auth required)
+app.get("/api/:eventId", async c => {
   const eventId = parseInt(c.req.param("eventId"));
+  console.log(`📋 [API] Fetching basic event details for event ${eventId}`);
   
   try {
+    const eventResult = await sqlite.execute(`
+      SELECT id, name, location, created_at FROM ${TABLES.EVENTS} WHERE id = ?
+    `, [eventId]);
+    
+    const event = eventResult.rows || eventResult;
+    
+    if (event.length === 0) {
+      console.log(`❌ [API] Event ${eventId} not found`);
+      return c.json({ error: "Event not found" }, 404);
+    }
+    
+    // Get attendee counts
+    const attendeeCountResult = await sqlite.execute(`
+      SELECT COUNT(*) as count FROM ${TABLES.ATTENDEES} WHERE event_id = ?
+    `, [eventId]);
+    
+    const checkedInCountResult = await sqlite.execute(`
+      SELECT COUNT(*) as count FROM ${TABLES.CHECKINS} WHERE attendee_id IN (
+        SELECT id FROM ${TABLES.ATTENDEES} WHERE event_id = ?
+      )
+    `, [eventId]);
+    
+    const attendeeCountRows = attendeeCountResult.rows || attendeeCountResult;
+    const checkedInCountRows = checkedInCountResult.rows || checkedInCountResult;
+    const attendeeCount = Number(attendeeCountRows[0]?.count || 0);
+    const checkedInCount = Number(checkedInCountRows[0]?.count || 0);
+    
+    console.log(`📋 [API] Event ${eventId} found: ${attendeeCount} attendees, ${checkedInCount} checked in`);
+    
+    return c.json({
+      event: {
+        id: event[0].id,
+        name: event[0].name,
+        location: event[0].location,
+        created_at: event[0].created_at
+      },
+      attendeeCount,
+      checkedInCount
+    });
+    
+  } catch (error) {
+    console.error(`💥 [API] Error fetching event details:`, error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Get attendee list for sign-in (names only, no sensitive info)
+app.get("/api/:eventId/attendees", async c => {
+  const eventId = parseInt(c.req.param("eventId"));
+  console.log(`📋 [API] Fetching attendees for event ${eventId}`);
+  
+  try {
+    // First check if event exists
+    console.log(`🔍 [API] Checking if event ${eventId} exists in table ${TABLES.EVENTS}`);
+    const eventCheckResult = await sqlite.execute(`
+      SELECT id FROM ${TABLES.EVENTS} WHERE id = ?
+    `, [eventId]);
+    
+    const eventCheck = eventCheckResult.rows || eventCheckResult;
+    console.log(`🔍 [API] Event check result: found ${eventCheck.length} events with ID ${eventId}`);
+    if (eventCheck.length === 0) {
+      console.log(`❌ [API] Event ${eventId} not found`);
+      return c.json({ error: "Event not found" }, 404);
+    }
+    
     // Get attendees with check-in status
-    const attendees = await sqlite.execute(`
+    console.log(`🔍 [API] Querying attendees from table ${TABLES.ATTENDEES} for event ${eventId}`);
+    const attendeesResult = await sqlite.execute(`
       SELECT a.id, a.name, 
              CASE WHEN c.id IS NOT NULL THEN 1 ELSE 0 END as checked_in
-      FROM ${ATTENDEES_TABLE} a
-      LEFT JOIN ${CHECKINS_TABLE} c ON a.id = c.attendee_id
+      FROM ${TABLES.ATTENDEES} a
+      LEFT JOIN ${TABLES.CHECKINS} c ON a.id = c.attendee_id
       WHERE a.event_id = ?
       ORDER BY a.name
     `, [eventId]);
     
-    return c.json({
+    const attendees = attendeesResult.rows || attendeesResult;
+    console.log(`📋 [API] Found ${attendees.length} attendees for event ${eventId}`);
+    
+    // Log first few attendees for debugging
+    if (attendees.length > 0) {
+      console.log(`🔍 [API] First few attendees:`, attendees.slice(0, 3).map(a => ({ id: a.id, name: a.name, checked_in: a.checked_in })));
+    }
+    
+    const result = {
       attendees: attendees.map(row => ({
         id: row.id,
         name: row.name,
         checkedIn: Boolean(row.checked_in)
       }))
-    });
+    };
+    
+    console.log(`📋 [API] Returning ${result.attendees.length} attendees to client`);
+    return c.json(result);
     
   } catch (error) {
-    console.error(`💥 [API] Error fetching attendees:`, error);
+    console.error(`💥 [API] Error fetching attendees for event ${eventId}:`, error);
+    console.error(`💥 [API] Error stack:`, error.stack);
     return c.json({ error: "Internal server error" }, 500);
   }
 });
 
 // Sign in to event
-app.post("/api/events/:eventId/signin", async c => {
+app.post("/api/:eventId/signin", async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
@@ -269,21 +389,23 @@ app.post("/api/events/:eventId/signin", async c => {
     }
     
     // Verify attendee belongs to this event
-    const attendee = await sqlite.execute(
-      `SELECT * FROM ${ATTENDEES_TABLE} WHERE id = ? AND event_id = ?`,
+    const attendeeResult = await sqlite.execute(
+      `SELECT * FROM ${TABLES.ATTENDEES} WHERE id = ? AND event_id = ?`,
       [attendeeId, eventId]
     );
     
+    const attendee = attendeeResult.rows || attendeeResult;
     if (attendee.length === 0) {
       return c.json({ error: "Attendee not found for this event" }, 404);
     }
     
     // Check if already signed in
-    const existingCheckIn = await sqlite.execute(
-      `SELECT * FROM ${CHECKINS_TABLE} WHERE event_id = ? AND attendee_id = ?`,
+    const existingCheckInResult = await sqlite.execute(
+      `SELECT * FROM ${TABLES.CHECKINS} WHERE event_id = ? AND attendee_id = ?`,
       [eventId, attendeeId]
     );
     
+    const existingCheckIn = existingCheckInResult.rows || existingCheckInResult;
     if (existingCheckIn.length > 0) {
       console.log(`⚠️ [API] Attendee ${attendee[0].name} already signed in`);
       // TODO: Consider security implications of multiple sign-in attempts
@@ -298,7 +420,7 @@ app.post("/api/events/:eventId/signin", async c => {
     
     // Record check-in
     await sqlite.execute(
-      `INSERT INTO ${CHECKINS_TABLE} (event_id, attendee_id) VALUES (?, ?)`,
+      `INSERT INTO ${TABLES.CHECKINS} (event_id, attendee_id) VALUES (?, ?)`,
       [eventId, attendeeId]
     );
     
@@ -316,8 +438,8 @@ app.post("/api/events/:eventId/signin", async c => {
   }
 });
 
-// Get event details (password protected)
-app.post("/api/events/:eventId/details", async c => {
+// Authentication endpoint - login with password and create session
+app.post("/api/:eventId/auth", async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
@@ -329,11 +451,12 @@ app.post("/api/events/:eventId/details", async c => {
     }
     
     // Get event
-    const events = await sqlite.execute(
-      `SELECT * FROM ${EVENTS_TABLE} WHERE id = ?`,
+    const eventsResult = await sqlite.execute(
+      `SELECT * FROM ${TABLES.EVENTS} WHERE id = ?`,
       [eventId]
     );
     
+    const events = eventsResult.rows || eventsResult;
     if (events.length === 0) {
       return c.json({ error: "Event not found" }, 404);
     }
@@ -345,16 +468,60 @@ app.post("/api/events/:eventId/details", async c => {
       return c.json({ error: "Invalid password" }, 401);
     }
     
-    // Get counts
-    const attendeeCount = await sqlite.execute(
-      `SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?`,
+    // Create session
+    const session = await createSession(eventId);
+    setSessionCookie(c, session.token);
+    
+    return c.json({ success: true });
+    
+  } catch (error) {
+    console.error(`💥 [API] Error during authentication:`, error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Logout endpoint
+app.post("/api/:eventId/logout", async c => {
+  clearSessionCookie(c);
+  return c.json({ success: true });
+});
+
+// Get event details (session protected)
+app.get("/api/:eventId/details", authMiddleware, async c => {
+  const eventId = parseInt(c.req.param("eventId"));
+  
+  try {
+    // Verify access to this specific event
+    if (!await verifyEventAccess(c, eventId)) {
+      return c.json({ error: "Unauthorized for this event" }, 403);
+    }
+    
+    // Get event
+    const eventsResult = await sqlite.execute(
+      `SELECT * FROM ${TABLES.EVENTS} WHERE id = ?`,
       [eventId]
     );
     
-    const checkedInCount = await sqlite.execute(
-      `SELECT COUNT(*) as count FROM ${CHECKINS_TABLE} WHERE event_id = ?`,
+    const events = eventsResult.rows || eventsResult;
+    if (events.length === 0) {
+      return c.json({ error: "Event not found" }, 404);
+    }
+    
+    const event = events[0];
+    
+    // Get counts
+    const attendeeCountResult = await sqlite.execute(
+      `SELECT COUNT(*) as count FROM ${TABLES.ATTENDEES} WHERE event_id = ?`,
       [eventId]
     );
+    
+    const checkedInCountResult = await sqlite.execute(
+      `SELECT COUNT(*) as count FROM ${TABLES.CHECKINS} WHERE event_id = ?`,
+      [eventId]
+    );
+    
+    const attendeeCountRows = attendeeCountResult.rows || attendeeCountResult;
+    const checkedInCountRows = checkedInCountResult.rows || checkedInCountResult;
     
     return c.json({
       event: {
@@ -363,8 +530,8 @@ app.post("/api/events/:eventId/details", async c => {
         location: event.location,
         created_at: event.created_at
       },
-      attendeeCount: attendeeCount[0].count,
-      checkedInCount: checkedInCount[0].count
+      attendeeCount: attendeeCountRows[0].count,
+      checkedInCount: checkedInCountRows[0].count
     });
     
   } catch (error) {
@@ -373,47 +540,31 @@ app.post("/api/events/:eventId/details", async c => {
   }
 });
 
-// Get analytics (password protected)
-app.post("/api/events/:eventId/analytics", async c => {
+// Get analytics (session protected)
+app.get("/api/:eventId/analytics", authMiddleware, async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
-    const body = await c.req.json();
-    const { password } = body;
-    
-    if (!password) {
-      return c.json({ error: "Password required" }, 401);
-    }
-    
-    // Verify event and password
-    const events = await sqlite.execute(
-      `SELECT password_hash FROM ${EVENTS_TABLE} WHERE id = ?`,
-      [eventId]
-    );
-    
-    if (events.length === 0) {
-      return c.json({ error: "Event not found" }, 404);
-    }
-    
-    if (!verifyPassword(password, events[0].password_hash)) {
-      return c.json({ error: "Invalid password" }, 401);
+    // Verify access to this specific event
+    if (!await verifyEventAccess(c, eventId)) {
+      return c.json({ error: "Unauthorized for this event" }, 403);
     }
     
     // Get total counts
     const totalAttendees = await sqlite.execute(
-      `SELECT COUNT(*) as count FROM ${ATTENDEES_TABLE} WHERE event_id = ?`,
+      `SELECT COUNT(*) as count FROM ${TABLES.ATTENDEES} WHERE event_id = ?`,
       [eventId]
     );
     
     const totalCheckedIn = await sqlite.execute(
-      `SELECT COUNT(*) as count FROM ${CHECKINS_TABLE} WHERE event_id = ?`,
+      `SELECT COUNT(*) as count FROM ${TABLES.CHECKINS} WHERE event_id = ?`,
       [eventId]
     );
     
     // Get check-ins by date
     const checkInsByDate = await sqlite.execute(`
       SELECT DATE(checked_in_at) as date, COUNT(*) as count
-      FROM ${CHECKINS_TABLE}
+      FROM ${TABLES.CHECKINS}
       WHERE event_id = ?
       GROUP BY DATE(checked_in_at)
       ORDER BY date
@@ -422,8 +573,8 @@ app.post("/api/events/:eventId/analytics", async c => {
     // Get recent check-ins
     const recentCheckIns = await sqlite.execute(`
       SELECT a.name as attendee_name, c.checked_in_at
-      FROM ${CHECKINS_TABLE} c
-      JOIN ${ATTENDEES_TABLE} a ON c.attendee_id = a.id
+      FROM ${TABLES.CHECKINS} c
+      JOIN ${TABLES.ATTENDEES} a ON c.attendee_id = a.id
       WHERE c.event_id = ?
       ORDER BY c.checked_in_at DESC
       LIMIT 10
@@ -448,40 +599,37 @@ app.post("/api/events/:eventId/analytics", async c => {
   }
 });
 
-// Export check-in data as CSV (password protected)
-app.post("/api/events/:eventId/export", async c => {
+// Export check-in data as CSV (session protected)
+app.get("/api/:eventId/export", authMiddleware, async c => {
   const eventId = parseInt(c.req.param("eventId"));
   
   try {
-    const body = await c.req.json();
-    const { password } = body;
-    
-    if (!password) {
-      return c.json({ error: "Password required" }, 401);
+    // Verify access to this specific event
+    if (!await verifyEventAccess(c, eventId)) {
+      return c.json({ error: "Unauthorized for this event" }, 403);
     }
     
-    // Verify event and password
-    const events = await sqlite.execute(
-      `SELECT password_hash, name FROM ${EVENTS_TABLE} WHERE id = ?`,
+    // Get event name
+    const eventsResult = await sqlite.execute(
+      `SELECT name FROM ${TABLES.EVENTS} WHERE id = ?`,
       [eventId]
     );
     
+    const events = eventsResult.rows || eventsResult;
     if (events.length === 0) {
       return c.json({ error: "Event not found" }, 404);
     }
     
-    if (!verifyPassword(password, events[0].password_hash)) {
-      return c.json({ error: "Invalid password" }, 401);
-    }
-    
     // Get all attendees with check-in data
-    const data = await sqlite.execute(`
+    const dataResult = await sqlite.execute(`
       SELECT a.name, a.external_id, c.checked_in_at
-      FROM ${ATTENDEES_TABLE} a
-      LEFT JOIN ${CHECKINS_TABLE} c ON a.id = c.attendee_id
+      FROM ${TABLES.ATTENDEES} a
+      LEFT JOIN ${TABLES.CHECKINS} c ON a.id = c.attendee_id
       WHERE a.event_id = ?
       ORDER BY a.name
     `, [eventId]);
+    
+    const data = dataResult.rows || dataResult;
     
     // Generate CSV
     const csvRows = [
