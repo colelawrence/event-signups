@@ -80,6 +80,11 @@ app.get("/events/:eventId/manage", async c => {
   return c.html(html);
 });
 
+app.get("/events/:eventId/add-attendee", async c => {
+  const html = await readFile("/frontend/index.html", import.meta.url);
+  return c.html(html);
+});
+
 // Utility functions
 function hashPassword(password: string): string {
   // Simple hash for demo - in production, use proper bcrypt or similar
@@ -501,6 +506,73 @@ app.post("/api/events/:eventId/export", async c => {
     
   } catch (error) {
     console.error(`💥 [API] Error exporting data:`, error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Add individual attendee to event (password protected)
+app.post("/api/events/:eventId/attendees", async c => {
+  const eventId = parseInt(c.req.param("eventId"));
+  
+  try {
+    const body = await c.req.json();
+    const { password, name, external_id } = body;
+    
+    console.log(`🎯 [API] Add attendee request for event ${eventId}: ${name}`);
+    
+    if (!password) {
+      return c.json({ error: "Password required" }, 401);
+    }
+    
+    if (!name || !name.trim()) {
+      return c.json({ error: "Attendee name required" }, 400);
+    }
+    
+    // Verify event and password
+    const events = await sqlite.execute(
+      `SELECT password_hash FROM ${EVENTS_TABLE} WHERE id = ?`,
+      [eventId]
+    );
+    
+    if (events.length === 0) {
+      return c.json({ error: "Event not found" }, 404);
+    }
+    
+    if (!verifyPassword(password, events[0].password_hash)) {
+      return c.json({ error: "Invalid password" }, 401);
+    }
+    
+    // Check if attendee with same name already exists
+    const existingAttendee = await sqlite.execute(
+      `SELECT id FROM ${ATTENDEES_TABLE} WHERE event_id = ? AND LOWER(name) = LOWER(?)`,
+      [eventId, name.trim()]
+    );
+    
+    if (existingAttendee.length > 0) {
+      return c.json({ error: "An attendee with this name already exists" }, 409);
+    }
+    
+    // Add attendee
+    const result = await sqlite.execute(
+      `INSERT INTO ${ATTENDEES_TABLE} (event_id, name, external_id) VALUES (?, ?, ?)`,
+      [eventId, name.trim(), external_id?.trim() || null]
+    );
+    
+    const attendeeId = Number(result.lastInsertRowid);
+    console.log(`✅ [API] Added attendee ${name} with ID: ${attendeeId}`);
+    
+    return c.json({
+      success: true,
+      attendee: {
+        id: attendeeId,
+        name: name.trim(),
+        external_id: external_id?.trim() || null,
+        event_id: eventId
+      }
+    });
+    
+  } catch (error) {
+    console.error(`💥 [API] Error adding attendee:`, error);
     return c.json({ error: "Internal server error" }, 500);
   }
 });

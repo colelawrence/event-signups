@@ -85,3 +85,20 @@ export interface CSVParseResult {
   totalRows: number;
   validRows: number;
 }
+
+// Add attendee request/response types
+export interface AddAttendeeRequest {
+  password: [REDACTED:password];
+  name: string;
+  external_id?: string;
+}
+
+export interface AddAttendeeResponse {
+  success: boolean;
+  attendee: {
+    id: number;
+    name: string;
+    external_id?: string;
+    event_id: number;
+  };
+}

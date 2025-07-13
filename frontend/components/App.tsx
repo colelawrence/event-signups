@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
 import EventCreation from "./EventCreation.tsx";
 import EventSignIn from "./EventSignIn.tsx";
 import EventManagement from "./EventManagement.tsx";
+import AddAttendee from "./AddAttendee.tsx";
 
 // Simple client-side routing based on URL path
 function useRouter() {
@@ -46,6 +47,26 @@ export default function App() {
       const eventId = getEventId();
       if (!eventId) return <div>Invalid event ID</div>;
       return <EventManagement eventId={eventId} />;
+    }
+    
+    if (path.includes('/add-attendee')) {
+      const eventId = getEventId();
+      if (!eventId) return <div>Invalid event ID</div>;
+      return (
+        <div className="py-12 px-4">
+          <div className="max-w-[600px] mx-auto">
+            <div className="text-center mb-8">
+              <h1 className="font-heading text-4xl font-semibold text-primary mb-3">
+                Add Attendee
+              </h1>
+              <p className="font-mono text-sm text-secondary tracking-wide">
+                Add a new attendee to the event
+              </p>
+            </div>
+            <AddAttendee eventId={eventId} />
+          </div>
+        </div>
+      );
     }
     
     return <div>Page not found</div>;
